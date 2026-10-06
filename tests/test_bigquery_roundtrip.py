@@ -1,10 +1,11 @@
 """Tests for the standalone BigQuery/CodeMender round-trip script."""
 
-import sys
 import tempfile
 import types
 import unittest
 from unittest.mock import patch
+
+from google.cloud import bigquery
 
 import codemender_bigquery_roundtrip as roundtrip
 
@@ -12,11 +13,6 @@ import codemender_bigquery_roundtrip as roundtrip
 class _Job:
   def result(self):
     return []
-
-
-class _Field:
-  def __init__(self, name):
-    self.name = name
 
 
 class _Client:
@@ -32,11 +28,11 @@ class _Client:
   def get_table(self, table_id):
     return types.SimpleNamespace(
         schema=[
-            _Field("repository"),
-            _Field("fingerprint"),
-            _Field("finding_id"),
-            _Field("scan_id"),
-            _Field("scan_timestamp"),
+            bigquery.SchemaField("repository", "STRING"),
+            bigquery.SchemaField("fingerprint", "STRING"),
+            bigquery.SchemaField("finding_id", "STRING"),
+            bigquery.SchemaField("scan_id", "STRING"),
+            bigquery.SchemaField("scan_timestamp", "TIMESTAMP"),
         ]
     )
 
@@ -69,6 +65,17 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(record["message"], "Untrusted input reaches a query.")
     self.assertEqual(record["snippet"], "query(user_input)")
     self.assertNotIn("fingerprint", record)
+
+  def test_ensure_dataset_creates_idempotently_in_requested_location(self):
+    client = unittest.mock.MagicMock()
+
+    roundtrip.ensure_dataset(client, "project", "dataset", "us-central1")
+
+    dataset_resource = client.create_dataset.call_args.args[0]
+    self.assertEqual(dataset_resource.project, "project")
+    self.assertEqual(dataset_resource.dataset_id, "dataset")
+    self.assertEqual(dataset_resource.location, "us-central1")
+    self.assertTrue(client.create_dataset.call_args.kwargs["exists_ok"])
 
   def test_rows_deduplicate_by_repository_and_finding_id(self):
     rows = [
@@ -180,6 +187,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           ),
           patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
+            patch.object(roundtrip, "ensure_dataset"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",
@@ -208,9 +216,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertIn("NULLIF(TRIM(finding_id), '') IS NOT NULL", query)
 
   def test_merge_uses_composite_key_and_removes_staging_table(self):
-    fake_bigquery = types.ModuleType("google.cloud.bigquery")
-    fake_bigquery.LoadJobConfig = lambda **kwargs: kwargs
-    fake_bigquery.WriteDisposition = types.SimpleNamespace(WRITE_TRUNCATE="WRITE_TRUNCATE")
     client = _Client()
     row = {
         "repository": "acme/widgets",
@@ -221,13 +226,12 @@ class BigQueryRoundtripTests(unittest.TestCase):
         "unexpected": "ignored by target schema",
     }
 
-    with patch.dict(sys.modules, {"google.cloud.bigquery": fake_bigquery}):
-      merged = roundtrip.merge_current_findings(
-          client,
-          "project.dataset.history",
-          "project.dataset.current_findings",
-          [row],
-      )
+    merged = roundtrip.merge_current_findings(
+      client,
+      "project.dataset.history",
+      "project.dataset.current_findings",
+      [row],
+    )
 
     self.assertEqual(merged, 1)
     self.assertIn(

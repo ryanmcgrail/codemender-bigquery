@@ -48,6 +48,18 @@ def _table_id(project: str, dataset: str, table: str) -> str:
   return f"{project}.{dataset}.{table}"
 
 
+def ensure_dataset(
+    client: Any, project: str, dataset: str, location: Optional[str] = None,
+) -> None:
+  """Creates the configured BigQuery dataset if it does not already exist."""
+  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
+
+  dataset_resource = bigquery.Dataset(f"{project}.{dataset}")
+  if location:
+    dataset_resource.location = location
+  client.create_dataset(dataset_resource, exists_ok=True)
+
+
 def _text(row: Mapping[str, Any], key: str) -> str:
   value = row.get(key)
   return str(value).strip() if value is not None else ""
@@ -372,6 +384,7 @@ def run_roundtrip(
     from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
     client = bigquery.Client(project=project)
+  ensure_dataset(client, project, dataset, location)
   cm_binary = cm_binary or shutil.which("cm") or "cm"
 
   source_rows = fetch_latest_findings(
