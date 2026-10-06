@@ -1,0 +1,4 @@
+# Wrong top-level key: the repositories must sit under "repositories".
+repos:
+  svc-a:
+    repo_url: https://github.com/example-org/svc-a.git

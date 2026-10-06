@@ -1,0 +1,3 @@
+repositories:
+  svc-a:
+    repo_ulr: https://github.com/example-org/svc-a.git

@@ -1,0 +1,5 @@
+# The same repository the test also defines through target_repositories.
+repositories:
+  from-yaml:
+    repo_url: https://github.com/example-org/same.git
+    find_flags: "--deep"

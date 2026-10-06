@@ -1,0 +1,83 @@
+# Non-secret deployment settings.
+#
+# Copy this file to deployment.yaml in the same directory and commit it. Each
+# key sets the Terraform variable of the same name (see variables.tf for the
+# full descriptions) and takes precedence over terraform.tfvars and -var.
+# Omitted keys keep the variable's default. An unknown key or a value of the
+# wrong type fails the plan.
+#
+# Do not put secrets here. GitHub credentials and Wiz credentials live in
+# Secret Manager; this file only names the secrets.
+
+# --- Required ---------------------------------------------------------------
+project_id: your-project-id
+
+# --- Naming and location ----------------------------------------------------
+region: us-central1
+# Prefix for every resource name: 1-17 lowercase letters, digits or hyphens.
+# Changing it replaces the whole deployment.
+resource_prefix: codemender
+# reports_bucket_name: ""  # default: <resource_prefix>-reports-<project_id>
+
+# --- Cloud Run jobs -----------------------------------------------------------
+runner_cpu: "4"
+runner_memory: 16Gi
+# Image a job is created with. Later rollouts come from the image pipeline
+# (cloudbuild.yaml), so this only matters when a job is first created or
+# replaced. Point it at a known-good runner image digest once one exists.
+# initial_runner_image: us-docker.pkg.dev/cloudrun/container/job:latest
+
+# --- CodeMender CLI version ---------------------------------------------------
+# Each scan updates the CLI to the latest release before it starts. Set false
+# to run exactly the release baked into the runner image.
+cm_auto_update: true
+
+# --- Image pipeline -------------------------------------------------------------
+# Service accounts that build and roll out the runner image. Default: the
+# project's default Cloud Build service accounts. With terraform/bootstrap,
+# list its image-build service account (see its deployment_yaml_snippet output).
+# cloudbuild_service_account_emails:
+#   - codemender-image-build@your-project-id.iam.gserviceaccount.com
+
+# --- Scheduling -----------------------------------------------------------------
+# Default schedule for repositories in repos.yaml that do not set one.
+scheduler_cron: "0 2 * * *"
+scheduler_timezone: Etc/UTC
+# Keep true for the first deployment, until a runner image has been rolled out.
+scheduler_paused: true
+
+# --- GitHub App authentication (optional) -------------------------------------
+# github_app_id: ""
+# github_app_installation_id: ""
+# github_app_private_key_secret_id: ""  # default: <resource_prefix>-github-app-private-key
+
+# --- Fix commit author (optional) ---------------------------------------------
+# Author and committer of the fix commits. When unset, scans with a GitHub App
+# commit as the App's bot account (<app-slug>[bot]) and other scans as
+# "CodeMender Agent <codemender-agent@noreply.invalid>". Set an address here if
+# your GitHub commit email rules require one; without git_author_name it is
+# used with the name "CodeMender Agent".
+# git_author_name: ""
+# git_author_email: ""
+
+# --- Wiz SAST bridge secrets (optional) ---------------------------------------
+# wiz_client_id_secret_id: ""      # default: <resource_prefix>-wiz-client-id
+# wiz_client_secret_secret_id: ""  # default: <resource_prefix>-wiz-client-secret
+
+# --- BigQuery telemetry ---------------------------------------------------------
+enable_bigquery_telemetry: true
+# Defaults to codemender_telemetry (not prefixed with resource_prefix). Set a
+# distinct dataset ID if another deployment already uses this project.
+# bigquery_dataset_id: codemender_telemetry
+# bigquery_location: ""  # default: region
+bigquery_include_snippets: false
+# bigquery_deletion_protection: true
+# bigquery_delete_contents_on_destroy: false
+
+# --- Private egress (optional) --------------------------------------------------
+create_vpc_and_nat: false
+# existing_vpc_connector_id: projects/<project>/locations/<region>/connectors/<name>
+# vpc_connector_cidr: 10.0.0.0/26
+# vpc_connector_min_instances: 2
+# vpc_connector_max_instances: 3
+# vpc_connector_machine_type: e2-micro

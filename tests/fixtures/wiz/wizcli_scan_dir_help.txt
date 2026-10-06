@@ -1,0 +1,147 @@
+Usage: wizcli scan dir <path> [flags]
+
+Scan a directory
+
+Arguments:
+  <path>    Path to scan
+
+Flags:
+  -h, --help    Show context-sensitive help.
+
+Directory scan options
+  --disabled-scanners=DISABLED-SCANNERS,...
+      Scanners to disable for the scan (Supported:
+      Vulnerability,Secret,SensitiveData,Misconfiguration,SoftwareSupplyChain,AIModels,SAST,Malware)
+
+Common scan options
+      --client-id=STRING          Wiz service account's client ID
+                                  ($WIZ_CLIENT_ID)
+      --client-secret=STRING      Wiz service account's client secret
+                                  ($WIZ_CLIENT_SECRET)
+      --projects=PROJECTS,...     Scopes the scan to specific Wiz Projects
+                                  by ID or slug (slug is only supported when
+                                  authenticating via a Wiz Deployment with its
+                                  auto-generated service account). If not used,
+                                  the scan defaults to all Projects associated
+                                  with the authenticated service account.
+      --use-device-code           Use device code flow for authentication,
+                                  ignores client ID and secret
+      --no-browser                Do not open browser for device code flow
+      --name=STRING               Scan name. If empty, will be auto-generated
+                                  based on the scan type and scanned target
+      --timeout=1h                Timeout for the scan
+  -p, --policies=POLICIES,...     Policies to apply to the scan
+      --applications=APPLICATIONS,...
+                                  Defines the code application environment; this
+                                  affects the applied ignore rules when provided
+  -t, --tags=TAGS-VALUE           Tags to mark the scan with, can be KEY or
+                                  KEY=VALUE
+      --no-publish                Disable publishing scan results to the Wiz
+                                  portal
+      --wiz-configuration-file=STRING
+                                  Path (relative to the current working
+                                  directory) to the Wiz configuration file.
+                                  Will use .wiz file if not specified
+      --scan-context-id=STRING    Context identifier that defines scan
+                                  granularity ($WIZ_SCAN_CONTEXT_ID)
+
+Scan output options
+  -C, --no-color                   Disable color output
+  -S, --no-style                   Disable stylized output
+  -T, --no-telemetry               Disable telemetry
+      --log=STRING                 File path at which to write debug logs
+                                   (defaults to no logs)
+      --stdout="human"             Output type for stdout (Supported:
+                                   human,json,csv,sarif)
+      --sbom-format=STRING         Generate a Software Bill of Materials (SBOM)
+                                   report. Available options are [cyclonedx-xml,
+                                   cyclonedx-json, spdx-txt, spdx-json]
+      --sbom-output-file=STRING    Local file path to store the Software Bill of
+                                   Materials (SBOM) report
+      --csv-output-file=STRING     Local file path to store the CSV report as a
+                                   zip archive
+      --sarif-output-file=STRING
+                                   Local file path to store the Sarif report
+      --json-output-file=STRING    Local file path to store the Json report
+      --human-output-file=STRING
+                                   Local file path to store the Human report
+
+Scan results filter options
+  --by-policy-hits="BLOCK"    Show only results by policy hits (Supported:
+                              BLOCK, AUDIT, DISABLED)
+  --show-ignored-by-grace-period
+                              Show results ignored by grace period even if they
+                              are not policy hits
+
+IaC scan options
+  --types=all,...                 Narrow down the scan to specific
+                                  types (supported values:
+                                  Ansible,AzureResourceManager,Bicep,Cloudformation,Crossplane,Dockerfile,GitHubActions,GoogleCloudDeploymentManager,Kubernetes,Pulumi,Terraform)
+  --dir-traversal-workers=64      Number of workers used during directory
+                                  traversal phase
+  --rule-evaluation-workers=64    Number of workers used during rule evaluation
+                                  phase
+  --max-file-size=64 MiB          Maximum file size to scan, can be specified in
+                                  SI units, e.g. 1MiB, 64KiB, 2GB, 1048576
+  --discovered-resources          In supported platforms (currently Terraform
+                                  only), discover cloud resources and include
+                                  them in the scan's JSON output
+  --ignore-comments               Enable ignore comments: files, code blocks,
+                                  and lines will be ignored
+  --expand-cloudformation-intrinsics
+                                  Expand intrinsic functions when processing
+                                  CloudFormation templates (default:true)
+  --max-depth=32                  Maximum depth of intrinsic functions when
+                                  evaluating CloudFormation templates
+  --keep-false-conditions         When processing CloudFormation templates,
+                                  if a Resource object has a Condition field,
+                                  and this condition evaluates to false,
+                                  we will keep this Resource object and
+                                  validate it Default behaviour is to remove
+                                  Resource objects with false conditions.
+                                  Using this flag automatically enables the
+                                  --expand-cloudformation-intrinsics flag
+  --tag-file=TAG-FILES-CMD        Comma-seperated 2-tuple in which the first
+                                  element is a glob-pattern which expands to
+                                  the file paths to apply the external tags to,
+                                  and the second element is a glob-pattern which
+                                  expands to the file paths of the external
+                                  tag files. Each external tag file is a JSON
+                                  formatted file that contains a dictionary, in
+                                  which a key represents a tag key and the value
+                                  represents a tag value (e.g. { "tag_key1":
+                                  "tag_value1", "tag_key2": "tag_value2" }).
+                                  Using this flag automatically enables the
+                                  --expand-cloudformation-intrinsics flag
+  --parameter-files=PARAMETER-FILES,...
+                                  Comma separated list of globs of external
+                                  parameter files to include while scanning.
+                                  Using this flag automatically enables the
+                                  --expand-cloudformation-intrinsics flag
+
+Vulnerability scan options
+  --scan-os-managed-libraries    Enable or disable scanning of OS-package
+                                 managed code libraries for this scan (overrides
+                                 tenant setting)
+  --scan-go-standard-library     Enable or disable scanning of Go Standard
+                                 library for this scan (overrides tenant
+                                 setting)
+  --apply-code-library-exclusion-paths-legacy
+                                 Enable or disable applying code library
+                                 exclusion paths (legacy) for this scan
+                                 (overrides tenant setting)
+  --ignore-code-library-vulns-in-redhat-openshift-images
+                                 Enable or disable ignoring code library
+                                 vulnerabilities in Red Hat Openshift container
+                                 images for this scan (overrides tenant setting)
+  --scan-sbom                    Scan SBOM files in the scan target (no creator
+                                 comment "Installed Packages" is required)
+  --scan-python-custom-requirements
+                                 Enable or disable scanning of custom Python
+                                 requirements files for this scan (overrides
+                                 tenant setting)
+
+SAST scan options
+  --sast-no-gitignore    Disable respecting .gitignore files during SAST
+                         scanning. If this flag is omitted, git must be
+                         installed to scan git repositories.

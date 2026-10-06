@@ -1,0 +1,18 @@
+Discover security vulnerabilities in source code.
+
+When called without a subcommand, runs a quick scan (classifier only).
+
+  cm find <path>             Quick scan (May have false positives. Use 'cm verify' to triage.)
+
+Use 'cm verify <finding-id>' to verify a specific finding from a previous scan.
+
+Usage:
+  cm find [command]
+Flags:
+  -c, --context <text>   Additional context to guide the scan agent
+  -h, --help             help for find
+      --model string     LLM model to use (default "cm-default-model")
+      --unrestricted     Disable filesystem sandbox (allow agent to access any path)
+  -y, --yes              Skip all confirmation prompts (commands and file writes)
+
+Use "cm find [command] --help" for more information about a command.

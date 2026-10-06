@@ -1,0 +1,78 @@
+# =============================================================================
+# CodeMender GitHub Actions WIF & GitHub Configuration
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Google Cloud Project Configuration (REQUIRED)
+# -----------------------------------------------------------------------------
+# The GCP Project ID hosting Vertex AI where Gemini LLM APIs will be queried.
+gcp_project_id = "your-gcp-project-id"
+
+# The GCP region for resource deployment (default: "global")
+gcp_region     = "global"
+
+
+# -----------------------------------------------------------------------------
+# 2. GitHub Organization / User Configuration (REQUIRED)
+# -----------------------------------------------------------------------------
+# GitHub organization name (e.g. "my-org") or username (e.g. "octocat").
+github_owner = "your-github-org-or-username"
+
+# Numeric App ID from Step 1.1 (GitHub App settings page, e.g. "123456").
+# Configured automatically as the GH_APP_ID secret in target repositories.
+github_app_id = "123456"
+
+
+# -----------------------------------------------------------------------------
+# 3. Workload Identity Federation (WIF) Scoping Type (REQUIRED)
+# -----------------------------------------------------------------------------
+# Controls who is authorized in GCP IAM to call Vertex AI:
+#   - "org"          : Authorizes ALL repositories under github_owner organization (Recommended for orgs)
+#   - "user"         : Authorizes ALL repositories under github_owner user account (For personal accounts)
+#   - "repositories" : Restricts GCP WIF access strictly to repositories listed in 'wif_allowed_repositories'
+github_scope_type = "org"
+
+
+# -----------------------------------------------------------------------------
+# 4. Target GitHub Repositories for Actions Secrets & PR Label Setup
+# -----------------------------------------------------------------------------
+# List of repository names where Terraform will configure GitHub Secrets
+# (GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT, GH_APP_ID) and the
+# 'codemender-scan' PR trigger label.
+#
+# NOTE:
+#   - When github_scope_type is "org" or "user": Set this list to the repos you are onboarding.
+#   - When github_scope_type is "repositories": You can leave this empty ([]), and Terraform
+#     will automatically use 'wif_allowed_repositories' below.
+#
+# Examples: ["backend-service", "frontend-app", "juice-shop-local"]
+target_github_repositories = [
+  "backend-service",
+  "frontend-app"
+]
+
+
+# =============================================================================
+# OPTIONAL ADVANCED CONFIGURATIONS (Uncomment if customizing)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# WIF Allowed Repositories (REQUIRED ONLY IF github_scope_type = "repositories")
+# -----------------------------------------------------------------------------
+# Defines the GCP IAM security perimeter (which repositories are allowed to
+# authenticate with GCP Vertex AI). Must be formatted as "owner/repo".
+# (Ignored when github_scope_type is "org" or "user").
+#
+# wif_allowed_repositories = [
+#   "your-org/backend-service",
+#   "your-org/frontend-app"
+# ]
+
+# Custom Service Account ID (default: "codemender-gha-sa")
+# gcp_service_account_id = "codemender-gha-sa"
+
+# Custom Workload Identity Pool ID (default: "codemender-gha-pool")
+# gcp_wif_pool_id = "codemender-gha-pool"
+
+# Custom Workload Identity Provider ID (default: "codemender-gha-provider")
+# gcp_wif_provider_id = "codemender-gha-provider"

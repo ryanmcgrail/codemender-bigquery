@@ -1,0 +1,10 @@
+# The same repository twice, once quoted. yamldecode() would keep only the
+# second entry without an error.
+repositories:
+    svc-a:
+        repo_url: https://github.com/example-org/svc-a.git
+        schedule: "0 2 * * 1"
+    svc-b:
+        repo_url: https://github.com/example-org/svc-b.git
+    "svc-a":
+        repo_url: https://github.com/example-org/other.git

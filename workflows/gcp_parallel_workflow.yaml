@@ -1,0 +1,509 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+main:
+  params: [args]
+  steps:
+    - init_variables:
+        assign:
+          - default_empty_map: {}
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - region: ${default(map.get(args, "region"), "us-central1")}
+          - resource_prefix: ${default(map.get(args, "resource_prefix"), "codemender")}
+          - job_name: ${default(map.get(args, "job_name"), resource_prefix + "-runner")}
+          - worker_job_name: ${default(map.get(args, "worker_job_name"), text.replace_all(job_name, "-runner", "") + "-worker")}
+          - gcs_bucket: ${default(map.get(args, "gcs_bucket"), resource_prefix + "-reports-" + project_id)}
+          - repo_url: ${args.repo_url}
+          - build_command: ${default(map.get(args, "build_command"), "")}
+          - target_branch: ${default(map.get(args, "target_branch"), "")}
+          - scan_target: ${default(map.get(args, "scan_target"), ".")}
+          - max_tasks: ${int(default(map.get(args, "max_tasks"), 20))}
+          - timeout_seconds: ${int(default(map.get(args, "timeout_seconds"), 86400))}
+          - scan_id: ${"scan-" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+          - execution_url: ${"https://console.cloud.google.com/workflows/workflow/" + region + "/" + text.replace_all(job_name, "-runner", "-coordinator") + "/execution/" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID") + "?project=" + project_id}
+          - cli_version: ${default(map.get(args, "cli_version"), "preview")}
+          - raw_model: ${default(map.get(args, "model"), "")}
+          - model: ${raw_model}
+          - models: ${default(map.get(args, "models"), default_empty_map)}
+          - skip_exploit_verification: ${default(map.get(args, "skip_exploit_verification"), false)}
+          - skip_verify: ${default(map.get(args, "skip_verify"), true)}
+          # Dry run: no GitHub writes and no remote duplicate checks. Off
+          # unless the payload sets dry_run = true.
+          - dry_run: ${default(map.get(args, "dry_run"), false)}
+          - raw_find_model: ${default(map.get(models, "find"), "")}
+          - raw_verify_model: ${default(map.get(models, "verify"), "")}
+          - raw_fix_model: ${default(map.get(models, "fix"), "")}
+          - find_model: ${if(raw_find_model != "", raw_find_model, model)}
+          - verify_model: ${if(raw_verify_model != "", raw_verify_model, model)}
+          - fix_model: ${if(raw_fix_model != "", raw_fix_model, model)}
+          # Opt-in Wiz SAST bridge; absent or disabled unless the scheduler
+          # payload carries wiz.enabled = true for this repository.
+          - wiz: ${default(map.get(args, "wiz"), default_empty_map)}
+          - wiz_enabled: ${default(map.get(wiz, "enabled"), false)}
+          - wiz_min_severity: ${default(map.get(wiz, "min_severity"), "HIGH")}
+          # Optional extra cm flags per command (shell-style strings); the
+          # orchestrator drops any flag the installed cm does not support.
+          - cm_flags: ${default(map.get(args, "cm_flags"), default_empty_map)}
+          - find_flags: ${default(map.get(cm_flags, "find"), "")}
+          - verify_flags: ${default(map.get(cm_flags, "verify"), "")}
+          - fix_flags: ${default(map.get(cm_flags, "fix"), "")}
+          - target_sha: ""
+          - num_workers: 0
+          - stage2_failed: false
+          - stage2_error_message: ""
+          - pipeline_error: {}
+          - failure_msg: "Workflow execution failed"
+
+    - log_start:
+        call: sys.log
+        args:
+          text: '${"Starting parallel scan for repository: " + repo_url + " (Scan ID: " + scan_id + ")"}'
+          severity: INFO
+
+    - run_stage1_scan:
+        try:
+          call: googleapis.run.v2.projects.locations.jobs.run
+          args:
+            name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + job_name}
+            body:
+              overrides:
+                taskCount: 1
+                timeout: ${string(timeout_seconds) + "s"}
+                containerOverrides:
+                  - env:
+                      - name: CODEMENDER_RUN_MODE
+                        value: "scan"
+                      - name: CODEMENDER_SCAN_ID
+                        value: ${scan_id}
+                      - name: CODEMENDER_GCS_BUCKET
+                        value: ${gcs_bucket}
+                      - name: GITHUB_REPO_URL
+                        value: ${repo_url}
+                      - name: CODEMENDER_BUILD_COMMAND
+                        value: ${build_command}
+                      - name: CODEMENDER_TARGET_BRANCH
+                        value: ${target_branch}
+                      - name: CODEMENDER_EXECUTION_URL
+                        value: ${execution_url}
+                      - name: CODEMENDER_SCAN_TARGET
+                        value: ${scan_target}
+                      - name: CODEMENDER_MAX_TASKS
+                        value: ${string(max_tasks)}
+                      - name: CODEMENDER_CLI_VERSION
+                        value: ${cli_version}
+                      - name: CODEMENDER_MODEL
+                        value: ${model}
+                      - name: CODEMENDER_FIND_MODEL
+                        value: ${find_model}
+                      - name: CODEMENDER_VERIFY_MODEL
+                        value: ${verify_model}
+                      - name: CODEMENDER_FIX_MODEL
+                        value: ${fix_model}
+                      - name: CODEMENDER_SKIP_EXPLOIT_VERIFICATION
+                        value: ${string(skip_exploit_verification)}
+                      - name: CODEMENDER_SKIP_VERIFY
+                        value: ${string(skip_verify)}
+                      - name: CODEMENDER_DRY_RUN
+                        value: ${string(dry_run)}
+                      - name: CODEMENDER_WIZ_ENABLED
+                        value: ${string(wiz_enabled)}
+                      - name: CODEMENDER_WIZ_MIN_SEVERITY
+                        value: ${wiz_min_severity}
+                      - name: CODEMENDER_FIND_FLAGS
+                        value: ${find_flags}
+            connector_params:
+              skip_polling: true
+          result: stage1_operation
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 10
+            max_delay: 60
+            multiplier: 2
+        except:
+          as: err
+          steps:
+            - route_stage1_launch_error:
+                assign:
+                  - pipeline_error: ${err}
+                  - failure_msg: ${default(map.get(err, "message"), "Stage 1 job launch failed")}
+                next: handle_workflow_failure
+
+    - wait_stage1:
+        try:
+          call: wait_for_operation
+          args:
+            operation_name: ${stage1_operation.name}
+            timeout_seconds: ${timeout_seconds}
+          result: stage1_execution
+        except:
+          as: err
+          steps:
+            - route_stage1_wait_error:
+                assign:
+                  - pipeline_error: ${err}
+                  - failure_msg: ${default(map.get(err, "message"), "Stage 1 job execution failed")}
+                next: handle_workflow_failure
+
+    - read_manifest:
+        try:
+          call: googleapis.storage.v1.objects.get
+          args:
+            bucket: ${gcs_bucket}
+            object: ${text.url_encode("scans/" + scan_id + "/manifest.json")}
+            alt: "media"
+          result: manifest_response
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 5
+            max_delay: 20
+            multiplier: 2
+        except:
+          as: err
+          steps:
+            - route_manifest_error:
+                assign:
+                  - pipeline_error: ${err}
+                  - failure_msg: ${default(map.get(err, "message"), "Manifest download failed")}
+                next: handle_workflow_failure
+
+    - parse_manifest:
+        assign:
+          - manifest: ${manifest_response}
+          - findings_count: ${int(manifest.findings_count)}
+          - target_sha: ${default(map.get(manifest, "target_sha"), "")}
+
+    - check_findings:
+        switch:
+          - condition: ${findings_count == 0}
+            next: finish_workflow
+
+    - prepare_worker_vars:
+        assign:
+          - base_workspace_url: ${manifest.base_workspace_url}
+          - partition_urls_str: ${json.encode_to_string(manifest.partition_urls)}
+          - upload_urls_str: ${json.encode_to_string(manifest.upload_urls)}
+          - metadata_urls_str: ${json.encode_to_string(default(map.get(manifest, "metadata_urls"), []))}
+          - total_partitions: ${len(manifest.partition_urls)}
+
+    - determine_num_workers:
+        switch:
+          - condition: ${total_partitions > max_tasks}
+            assign:
+              - num_workers: ${max_tasks}
+          - condition: true
+            assign:
+              - num_workers: ${total_partitions}
+
+    - run_stage2_workers:
+        try:
+          call: googleapis.run.v2.projects.locations.jobs.run
+          args:
+            name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + worker_job_name}
+            body:
+              overrides:
+                taskCount: ${num_workers}
+                timeout: ${string(timeout_seconds) + "s"}
+                containerOverrides:
+                  - env:
+                      - name: CODEMENDER_RUN_MODE
+                        value: "worker"
+                      - name: CODEMENDER_SCAN_ID
+                        value: ${scan_id}
+                      - name: CODEMENDER_GCS_BUCKET
+                        value: ${gcs_bucket}
+                      - name: GITHUB_REPO_URL
+                        value: ${repo_url}
+                      - name: CODEMENDER_BUILD_COMMAND
+                        value: ${build_command}
+                      - name: CODEMENDER_TARGET_BRANCH
+                        value: ${target_branch}
+                      - name: CODEMENDER_EXECUTION_URL
+                        value: ${execution_url}
+                      - name: CODEMENDER_SCAN_TARGET
+                        value: ${scan_target}
+                      - name: CODEMENDER_TARGET_SHA
+                        value: ${target_sha}
+                      - name: CODEMENDER_BASE_WORKSPACE_URL
+                        value: ${base_workspace_url}
+                      - name: CODEMENDER_PARTITION_URLS
+                        value: ${partition_urls_str}
+                      - name: CODEMENDER_UPLOAD_URLS
+                        value: ${upload_urls_str}
+                      - name: CODEMENDER_METADATA_URLS
+                        value: ${metadata_urls_str}
+                      - name: CODEMENDER_CLI_VERSION
+                        value: ${cli_version}
+                      - name: CODEMENDER_MODEL
+                        value: ${model}
+                      - name: CODEMENDER_FIND_MODEL
+                        value: ${find_model}
+                      - name: CODEMENDER_VERIFY_MODEL
+                        value: ${verify_model}
+                      - name: CODEMENDER_FIX_MODEL
+                        value: ${fix_model}
+                      - name: CODEMENDER_SKIP_EXPLOIT_VERIFICATION
+                        value: ${string(skip_exploit_verification)}
+                      - name: CODEMENDER_SKIP_VERIFY
+                        value: ${string(skip_verify)}
+                      - name: CODEMENDER_DRY_RUN
+                        value: ${string(dry_run)}
+                      - name: CODEMENDER_VERIFY_FLAGS
+                        value: ${verify_flags}
+                      - name: CODEMENDER_FIX_FLAGS
+                        value: ${fix_flags}
+            connector_params:
+              skip_polling: true
+          result: stage2_operation
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 10
+            max_delay: 60
+            multiplier: 2
+        except:
+          as: stage2_err
+          steps:
+            - record_stage2_launch_failure:
+                assign:
+                  - stage2_failed: true
+                  - stage2_error_message: ${default(map.get(stage2_err, "message"), "Stage 2 worker job launch failed")}
+            - log_stage2_launch_warning:
+                call: sys.log
+                args:
+                  text: '${"Stage 2 job launch encountered an error (" + stage2_error_message + "). Proceeding to Stage 3 aggregation to resolve GitHub commit status."}'
+                  severity: WARNING
+                next: run_stage3_aggregate
+
+    - wait_stage2:
+        try:
+          call: wait_for_operation
+          args:
+            operation_name: ${stage2_operation.name}
+            timeout_seconds: ${timeout_seconds}
+          result: stage2_execution
+        except:
+          as: stage2_err
+          steps:
+            - record_stage2_failure:
+                assign:
+                  - stage2_failed: true
+                  - stage2_error_message: ${default(map.get(stage2_err, "message"), "Stage 2 worker pool had failed tasks")}
+            - log_stage2_warning:
+                call: sys.log
+                args:
+                  text: '${"Stage 2 encountered an error (" + stage2_error_message + "). Proceeding to Stage 3 aggregation to merge completed shards and resolve GitHub commit status."}'
+                  severity: WARNING
+                next: run_stage3_aggregate
+
+    - run_stage3_aggregate:
+        try:
+          call: googleapis.run.v2.projects.locations.jobs.run
+          args:
+            name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + job_name}
+            body:
+              overrides:
+                taskCount: 1
+                timeout: ${string(timeout_seconds) + "s"}
+                containerOverrides:
+                  - env:
+                      - name: CODEMENDER_RUN_MODE
+                        value: "aggregate"
+                      - name: CODEMENDER_SCAN_ID
+                        value: ${scan_id}
+                      - name: CODEMENDER_GCS_BUCKET
+                        value: ${gcs_bucket}
+                      - name: GITHUB_REPO_URL
+                        value: ${repo_url}
+                      - name: CODEMENDER_BUILD_COMMAND
+                        value: ${build_command}
+                      - name: CODEMENDER_TARGET_BRANCH
+                        value: ${target_branch}
+                      - name: CODEMENDER_EXECUTION_URL
+                        value: ${execution_url}
+                      - name: CODEMENDER_SCAN_TARGET
+                        value: ${scan_target}
+                      - name: CODEMENDER_TARGET_SHA
+                        value: ${target_sha}
+                      - name: CODEMENDER_TOTAL_WORKERS
+                        value: ${string(num_workers)}
+                      - name: CODEMENDER_CLI_VERSION
+                        value: ${cli_version}
+                      - name: CODEMENDER_MODEL
+                        value: ${model}
+                      - name: CODEMENDER_FIND_MODEL
+                        value: ${find_model}
+                      - name: CODEMENDER_VERIFY_MODEL
+                        value: ${verify_model}
+                      - name: CODEMENDER_FIX_MODEL
+                        value: ${fix_model}
+                      - name: CODEMENDER_SKIP_EXPLOIT_VERIFICATION
+                        value: ${string(skip_exploit_verification)}
+                      - name: CODEMENDER_SKIP_VERIFY
+                        value: ${string(skip_verify)}
+                      - name: CODEMENDER_DRY_RUN
+                        value: ${string(dry_run)}
+            connector_params:
+              skip_polling: true
+          result: stage3_operation
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 3
+          backoff:
+            initial_delay: 10
+            max_delay: 60
+            multiplier: 2
+        except:
+          as: err
+          steps:
+            - route_stage3_launch_error:
+                assign:
+                  - pipeline_error: ${err}
+                  - failure_msg: ${default(map.get(err, "message"), "Stage 3 job launch failed")}
+                next: handle_workflow_failure
+
+    - wait_stage3:
+        try:
+          call: wait_for_operation
+          args:
+            operation_name: ${stage3_operation.name}
+            timeout_seconds: ${timeout_seconds}
+          result: stage3_execution
+        except:
+          as: err
+          steps:
+            - route_stage3_wait_error:
+                assign:
+                  - pipeline_error: ${err}
+                  - failure_msg: ${default(map.get(err, "message"), "Stage 3 job execution failed")}
+                next: handle_workflow_failure
+
+    - finish_workflow:
+        return: "Workflow completed successfully."
+
+    - handle_workflow_failure:
+        steps:
+          - assign_failure_msg:
+              assign:
+                - failure_msg: ${default(map.get(pipeline_error, "message"), "Workflow execution failed")}
+          - log_pipeline_error:
+              call: sys.log
+              args:
+                text: '${"Workflow failed for " + repo_url + " (Scan ID: " + scan_id + "): " + failure_msg + ". Running failure finalizer to ensure commit status is not stuck in pending."}'
+                severity: ERROR
+          - run_failure_finalizer:
+              try:
+                steps:
+                  - trigger_failure_finalize_job:
+                      call: googleapis.run.v2.projects.locations.jobs.run
+                      args:
+                        name: ${"projects/" + project_id + "/locations/" + region + "/jobs/" + job_name}
+                        body:
+                          overrides:
+                            taskCount: 1
+                            timeout: "600s"
+                            containerOverrides:
+                              - env:
+                                  - name: CODEMENDER_RUN_MODE
+                                    value: "aggregate"
+                                  - name: CODEMENDER_WORKFLOW_FAILED
+                                    value: "true"
+                                  - name: CODEMENDER_FAILURE_REASON
+                                    value: ${failure_msg}
+                                  - name: CODEMENDER_SCAN_ID
+                                    value: ${scan_id}
+                                  - name: CODEMENDER_GCS_BUCKET
+                                    value: ${gcs_bucket}
+                                  - name: GITHUB_REPO_URL
+                                    value: ${repo_url}
+                                  - name: CODEMENDER_TARGET_BRANCH
+                                    value: ${target_branch}
+                                  - name: CODEMENDER_TARGET_SHA
+                                    value: ${target_sha}
+                                  - name: CODEMENDER_EXECUTION_URL
+                                    value: ${execution_url}
+                                  - name: CODEMENDER_SCAN_TARGET
+                                    value: ${scan_target}
+                                  - name: CODEMENDER_SKIP_VERIFY
+                                    value: ${string(skip_verify)}
+                                  - name: CODEMENDER_DRY_RUN
+                                    value: ${string(dry_run)}
+                        connector_params:
+                          skip_polling: true
+                      result: finalize_op
+                  - wait_failure_finalize_job:
+                      call: wait_for_operation
+                      args:
+                        operation_name: ${finalize_op.name}
+                        timeout_seconds: 600
+                      result: finalize_res
+              except:
+                as: finalize_err
+                steps:
+                  - log_finalize_err:
+                      call: sys.log
+                      args:
+                        text: '${"Failure finalizer job also encountered an error: " + default(map.get(finalize_err, "message"), "unknown")}'
+                        severity: WARNING
+          - rethrow_pipeline_error:
+              raise: ${pipeline_error}
+
+wait_for_operation:
+  params: [operation_name, timeout_seconds]
+  steps:
+    - init_loop:
+        assign:
+          - elapsed: 0
+          - sleep_interval: 60
+    - get_operation:
+        try:
+          call: googleapis.run.v2.projects.locations.operations.get
+          args:
+            name: ${operation_name}
+          result: operation
+        retry:
+          predicate: ${http.default_retry_predicate}
+          max_retries: 5
+          backoff:
+            initial_delay: 5
+            max_delay: 60
+            multiplier: 2
+    - check_status:
+        switch:
+          - condition: ${default(map.get(operation, "done"), false) == true}
+            next: check_operation_result
+          - condition: ${elapsed >= timeout_seconds}
+            raise: '${"Operation " + operation_name + " timed out after " + string(timeout_seconds) + " seconds."}'
+        next: wait_more
+    - wait_more:
+        call: sys.sleep
+        args:
+          seconds: ${sleep_interval}
+    - increment_timer:
+        assign:
+          - elapsed: ${elapsed + sleep_interval}
+        next: get_operation
+
+    - check_operation_result:
+        switch:
+          - condition: ${"error" in operation}
+            raise: '${"Operation failed: " + operation.error.message}'
+          - condition: ${int(default(map.get(operation, ["response", "failedCount"]), 0)) > 0}
+            raise: '${"Job execution failed with " + string(operation.response.failedCount) + " failed tasks."}'
+    - return_result:
+        return: ${operation.response}

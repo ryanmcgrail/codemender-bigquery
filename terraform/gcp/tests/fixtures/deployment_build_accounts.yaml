@@ -1,0 +1,4 @@
+project_id: yaml-project
+cloudbuild_service_account_emails:
+  - image-build@yaml-project.iam.gserviceaccount.com
+  - 123456789-compute@developer.gserviceaccount.com

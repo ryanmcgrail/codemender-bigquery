@@ -1,0 +1,23 @@
+# Example terraform.tfvars for running this module by hand.
+#
+# For a deployment managed through pull requests, prefer the committed
+# deployment.yaml and repos.yaml files (see deployment.example.yaml and
+# repos.example.yaml): *.tfvars files are gitignored, so a pipeline never sees
+# them. A value set in deployment.yaml wins over the same value here, and a
+# repository defined in repos.yaml wins over the same name below.
+#
+# Copy to terraform.tfvars (gitignored) and adjust.
+
+project_id      = "your-project-id"
+region          = "us-central1"
+resource_prefix = "codemender"
+
+# Keep scheduled scans paused until a runner image has been rolled out.
+scheduler_paused = true
+
+target_repositories = {
+  "example-service" = {
+    repo_url = "https://github.com/your-org/example-service.git"
+    schedule = "0 2 * * *"
+  }
+}

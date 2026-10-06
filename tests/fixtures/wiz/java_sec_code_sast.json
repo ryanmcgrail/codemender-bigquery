@@ -1,0 +1,638 @@
+{
+ "status": {
+  "state": "SUCCESS",
+  "verdict": "WARN_BY_POLICY"
+ },
+ "extraInfo": {
+  "clientName": "WizCLI",
+  "clientVersion": "1.75.0-154cc7e"
+ },
+ "policies": [
+  {
+   "id": "2eebe47f-7e69-4cd8-bd90-719359c37f4c",
+   "name": "Default SAST policy (Wiz CI/CD scan)",
+   "type": "SAST",
+   "params": {
+    "__typename": "cicdscanpolicyparamssast"
+   }
+  }
+ ],
+ "result": {
+  "sast": [
+   {
+    "id": ".##WS-I013-JAVA-00078##src/main/java/org/example/controller/XXE.java##167##167##13##51",
+    "name": "Unsafe XML Parsing with SAXParserFactory",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 167,
+    "endLine": 167,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where the SAXParserFactory in Java is configured to allow XML external entity (XXE) attacks. XXE vulnerabilities can lead to sensitive data exposure, denial of service, and remote code execution.\n\nWhen parsing untrusted XML documents, the SAXParserFactory should be config",
+    "rule": {
+     "id": "WS-I013-JAVA-00078",
+     "name": "WS-I013-JAVA-00078"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00075##src/main/java/org/example/config/SafeDomainParser.java##33##33##13##59",
+    "name": "Disabling XML External Entity Attacks in Java",
+    "filePath": "src/main/java/org/example/config/SafeDomainParser.java",
+    "startLine": 33,
+    "endLine": 33,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where XML external entity (XXE) attacks are possible due to improper configuration of the Java DocumentBuilderFactory. XXE attacks allow an attacker to access arbitrary files on the system or launch denial-of-service attacks by forcing the XML parser to consume excessive ",
+    "rule": {
+     "id": "WS-I013-JAVA-00075",
+     "name": "WS-I013-JAVA-00075"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00075##src/main/java/org/example/config/SafeDomainParser.java##89##89##13##59",
+    "name": "Disabling XML External Entity Attacks in Java",
+    "filePath": "src/main/java/org/example/config/SafeDomainParser.java",
+    "startLine": 89,
+    "endLine": 89,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where XML external entity (XXE) attacks are possible due to improper configuration of the Java DocumentBuilderFactory. XXE attacks allow an attacker to access arbitrary files on the system or launch denial-of-service attacks by forcing the XML parser to consume excessive ",
+    "rule": {
+     "id": "WS-I013-JAVA-00075",
+     "name": "WS-I013-JAVA-00075"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00078##src/main/java/org/example/controller/XXE.java##369##369##13##54",
+    "name": "Unsafe XML Parsing with SAXParserFactory",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 369,
+    "endLine": 369,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where the SAXParserFactory in Java is configured to allow XML external entity (XXE) attacks. XXE vulnerabilities can lead to sensitive data exposure, denial of service, and remote code execution.\n\nWhen parsing untrusted XML documents, the SAXParserFactory should be config",
+    "rule": {
+     "id": "WS-I013-JAVA-00078",
+     "name": "WS-I013-JAVA-00078"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00078##src/main/java/org/example/controller/XXE.java##349##349##13##54",
+    "name": "Unsafe XML Parsing with SAXParserFactory",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 349,
+    "endLine": 349,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where the SAXParserFactory in Java is configured to allow XML external entity (XXE) attacks. XXE vulnerabilities can lead to sensitive data exposure, denial of service, and remote code execution.\n\nWhen parsing untrusted XML documents, the SAXParserFactory should be config",
+    "rule": {
+     "id": "WS-I013-JAVA-00078",
+     "name": "WS-I013-JAVA-00078"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00075##src/main/java/org/example/controller/XXE.java##295##295##13##59",
+    "name": "Disabling XML External Entity Attacks in Java",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 295,
+    "endLine": 295,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where XML external entity (XXE) attacks are possible due to improper configuration of the Java DocumentBuilderFactory. XXE attacks allow an attacker to access arbitrary files on the system or launch denial-of-service attacks by forcing the XML parser to consume excessive ",
+    "rule": {
+     "id": "WS-I013-JAVA-00075",
+     "name": "WS-I013-JAVA-00075"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00075##src/main/java/org/example/controller/XXE.java##240##240##13##59",
+    "name": "Disabling XML External Entity Attacks in Java",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 240,
+    "endLine": 240,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where XML external entity (XXE) attacks are possible due to improper configuration of the Java DocumentBuilderFactory. XXE attacks allow an attacker to access arbitrary files on the system or launch denial-of-service attacks by forcing the XML parser to consume excessive ",
+    "rule": {
+     "id": "WS-I013-JAVA-00075",
+     "name": "WS-I013-JAVA-00075"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00051##src/main/java/org/example/controller/Deserialize.java##49##49##9##61",
+    "name": "Insecure Object Deserialization",
+    "filePath": "src/main/java/org/example/controller/Deserialize.java",
+    "startLine": 49,
+    "endLine": 49,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "Object deserialization is the process of reconstructing object data from a serialized format, such as a byte stream. When deserializing untrusted data, an attacker can craft malicious serialized objects that can execute arbitrary code or perform other malicious actions when deserialized.\n\nThis vulne",
+    "rule": {
+     "id": "WS-I013-JAVA-00051",
+     "name": "WS-I013-JAVA-00051"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-502"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00085##src/main/java/org/example/controller/Rce.java##112##113##9##25",
+    "name": "Unsafe SnakeYAML Deserialization",
+    "filePath": "src/main/java/org/example/controller/Rce.java",
+    "startLine": 112,
+    "endLine": 113,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "The SnakeYAML library is vulnerable to deserialization attacks when using the default constructor without any arguments. This vulnerability allows an attacker to execute arbitrary code on the server by sending a maliciously crafted YAML payload. Deserialization vulnerabilities can lead to remote cod",
+    "rule": {
+     "id": "WS-I013-JAVA-00085",
+     "name": "WS-I013-JAVA-00085"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-502"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-JAVA-00035##src/main/java/org/example/controller/SQLI.java##67##67##51##54",
+    "name": "SQL Injection via Unsanitized User Input in Java",
+    "filePath": "src/main/java/org/example/controller/SQLI.java",
+    "startLine": 67,
+    "endLine": 67,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "SQL Injection vulnerability detected. User-controlled input flows into a SQL execution method without proper sanitization or parameterization. This can allow an attacker to modify query logic, access unauthorized data, or execute arbitrary database commands. Use parameterized queries (PreparedStatem",
+    "rule": {
+     "id": "WS-JAVA-00035",
+     "name": "WS-JAVA-00035"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-89"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-JAVA-00035##src/main/java/org/example/controller/SQLI.java##150##150##57##60",
+    "name": "SQL Injection via Unsanitized User Input in Java",
+    "filePath": "src/main/java/org/example/controller/SQLI.java",
+    "startLine": 150,
+    "endLine": 150,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "SQL Injection vulnerability detected. User-controlled input flows into a SQL execution method without proper sanitization or parameterization. This can allow an attacker to modify query logic, access unauthorized data, or execute arbitrary database commands. Use parameterized queries (PreparedStatem",
+    "rule": {
+     "id": "WS-JAVA-00035",
+     "name": "WS-JAVA-00035"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-89"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00051##src/main/java/org/example/controller/Shiro.java##37##37##13##65",
+    "name": "Insecure Object Deserialization",
+    "filePath": "src/main/java/org/example/controller/Shiro.java",
+    "startLine": 37,
+    "endLine": 37,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "Object deserialization is the process of reconstructing object data from a serialized format, such as a byte stream. When deserializing untrusted data, an attacker can craft malicious serialized objects that can execute arbitrary code or perform other malicious actions when deserialized.\n\nThis vulne",
+    "rule": {
+     "id": "WS-I013-JAVA-00051",
+     "name": "WS-I013-JAVA-00051"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-502"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00097##src/main/java/org/example/controller/FileUpload.java##144##144##25##85",
+    "name": "Tainted File Path",
+    "filePath": "src/main/java/org/example/controller/FileUpload.java",
+    "startLine": 144,
+    "endLine": 144,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where user input is used to construct a file path, which can lead to path traversal vulnerabilities. Path traversal vulnerabilities allow an attacker to access files outside the intended directory, potentially exposing sensitive data or executing unauthorized code. If exp",
+    "rule": {
+     "id": "WS-I013-JAVA-00097",
+     "name": "WS-I013-JAVA-00097"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-23"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00097##src/main/java/org/example/controller/FileUpload.java##62##62##25##80",
+    "name": "Tainted File Path",
+    "filePath": "src/main/java/org/example/controller/FileUpload.java",
+    "startLine": 62,
+    "endLine": 62,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "This rule detects instances where user input is used to construct a file path, which can lead to path traversal vulnerabilities. Path traversal vulnerabilities allow an attacker to access files outside the intended directory, potentially exposing sensitive data or executing unauthorized code. If exp",
+    "rule": {
+     "id": "WS-I013-JAVA-00097",
+     "name": "WS-I013-JAVA-00097"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-23"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00083##src/main/java/org/example/controller/Deserialize.java##93##93##13##66",
+    "name": "Unsafe Deserialization in Jackson JSON Library",
+    "filePath": "src/main/java/org/example/controller/Deserialize.java",
+    "startLine": 93,
+    "endLine": 93,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "When using Jackson to marshall/unmarshall JSON to Java objects, enabling default typing is dangerous and can lead to RCE. If an attacker can control `$JSON` it might be possible to provide a malicious JSON which can be used to exploit unsecure deserialization. In order to prevent this issue, avoid t",
+    "rule": {
+     "id": "WS-I013-JAVA-00083",
+     "name": "WS-I013-JAVA-00083"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-502"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I011-JAVA-00024##src/main/java/org/example/controller/Rce.java##36##36##13##39",
+    "name": "OS Command Injection in Java (ProcessBuilder)",
+    "filePath": "src/main/java/org/example/controller/Rce.java",
+    "startLine": 36,
+    "endLine": 36,
+    "severity": "HIGH",
+    "origin": "WIZ",
+    "description": "OS command injection vulnerabilities occur when user-supplied input is used to construct operating system commands without proper validation or sanitization. This can allow an attacker to execute arbitrary commands on the system, potentially leading to a complete system compromise.\n\nThe consequences",
+    "rule": {
+     "id": "WS-I011-JAVA-00024",
+     "name": "WS-I011-JAVA-00024"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-78"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I011-JAVA-00054##src/main/java/org/example/controller/XXE.java##75##75##13##70",
+    "name": "Unsafe XML External Entity (XXE) Processing",
+    "filePath": "src/main/java/org/example/controller/XXE.java",
+    "startLine": 75,
+    "endLine": 75,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "XML External Entity (XXE) vulnerabilities allow an attacker to interfere with the processing of XML data. By exploiting XXE, an attacker can gain unauthorized access to sensitive data, execute remote requests, or cause a Denial of Service (DoS) attack. This issue arises when an application processes",
+    "rule": {
+     "id": "WS-I011-JAVA-00054",
+     "name": "WS-I011-JAVA-00054"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-611"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I011-JAVA-00020##src/main/java/org/example/controller/URLRedirect.java##91##91##9##35",
+    "name": "Unvalidated Redirect in Java Web Applications",
+    "filePath": "src/main/java/org/example/controller/URLRedirect.java",
+    "startLine": 91,
+    "endLine": 91,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "Unvalidated redirects occur when an application redirects a user to a\ndestination URL specified by a user supplied parameter that is not validated.\nSuch vulnerabilities can be used to facilitate phishing attacks.\n\nTo avoid open redirect vulnerabilities in Java, one effective strategy is to\nonly allo",
+    "rule": {
+     "id": "WS-I011-JAVA-00020",
+     "name": "WS-I011-JAVA-00020"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-601"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I011-JAVA-00042##src/main/java/org/example/security/ssrf/SSRFChecker.java##74##74##50##82",
+    "name": "Server-Side Request Forgery (SSRF) in Java",
+    "filePath": "src/main/java/org/example/security/ssrf/SSRFChecker.java",
+    "startLine": 74,
+    "endLine": 74,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "Server-Side Request Forgery (SSRF) is a vulnerability that allows an attacker to force a server to make requests to arbitrary systems, potentially exposing sensitive data or causing unintended actions. This occurs when user input is used directly in constructing URLs or payloads for requests initiat",
+    "rule": {
+     "id": "WS-I011-JAVA-00042",
+     "name": "WS-I011-JAVA-00042"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-918"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I007-JAVA-00019##src/main/java/org/example/security/WebSecurityConfig.java##65##66##9##66",
+    "name": "Disabling CSRF Protection in Spring Security",
+    "filePath": "src/main/java/org/example/security/WebSecurityConfig.java",
+    "startLine": 65,
+    "endLine": 66,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "Cross-Site Request Forgery (CSRF) is a type of attack that occurs when a malicious web site, email, or program causes a user's web browser to perform an unwanted action on a trusted site where the user is currently authenticated. By disabling CSRF protection in Spring Security, the application becom",
+    "rule": {
+     "id": "WS-I007-JAVA-00019",
+     "name": "WS-I007-JAVA-00019"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-352"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00019##src/main/java/org/example/security/LoginFailureHandler.java##24##26##9##68",
+    "name": "CRLF Injection in Logs",
+    "filePath": "src/main/java/org/example/security/LoginFailureHandler.java",
+    "startLine": 24,
+    "endLine": 26,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "This rule detects instances where user-supplied data is logged without proper sanitization, leading to a CRLF Injection vulnerability. CRLF Injection occurs when an attacker can inject malicious carriage return (CR) and line feed (LF) characters into application logs, allowing them to forge log entr",
+    "rule": {
+     "id": "WS-I013-JAVA-00019",
+     "name": "WS-I013-JAVA-00019"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-93"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00063##src/main/java/org/example/controller/CommandInject.java##45##45##9##62",
+    "name": "Command Injection from Unsanitized HTTP Request Data",
+    "filePath": "src/main/java/org/example/controller/CommandInject.java",
+    "startLine": 45,
+    "endLine": 45,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "This rule detects instances where user input from an HTTP request is passed directly into a command execution function, such as `ProcessBuilder` or `Runtime.exec()`, without proper sanitization. This can lead to command injection vulnerabilities, allowing an attacker to execute arbitrary system comm",
+    "rule": {
+     "id": "WS-I013-JAVA-00063",
+     "name": "WS-I013-JAVA-00063"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-78"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I011-JAVA-00003##src/main/java/org/example/filter/OriginFilter.java##48##48##9##67",
+    "name": "Improper Neutralization of CRLF Sequences in HTTP Headers",
+    "filePath": "src/main/java/org/example/filter/OriginFilter.java",
+    "startLine": 48,
+    "endLine": 48,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "HTTP Response Splitting is a vulnerability that allows an attacker to inject malicious content into HTTP response headers by introducing carriage return (CR `\\r`) and line feed (LF `\\n`) characters. This vulnerability arises when user-supplied input is used to construct HTTP headers without proper s",
+    "rule": {
+     "id": "WS-I011-JAVA-00003",
+     "name": "WS-I011-JAVA-00003"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-113"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00063##src/main/java/org/example/controller/CommandInject.java##47##47##9##43",
+    "name": "Command Injection from Unsanitized HTTP Request Data",
+    "filePath": "src/main/java/org/example/controller/CommandInject.java",
+    "startLine": 47,
+    "endLine": 47,
+    "severity": "MEDIUM",
+    "origin": "WIZ",
+    "description": "This rule detects instances where user input from an HTTP request is passed directly into a command execution function, such as `ProcessBuilder` or `Runtime.exec()`, without proper sanitization. This can lead to command injection vulnerabilities, allowing an attacker to execute arbitrary system comm",
+    "rule": {
+     "id": "WS-I013-JAVA-00063",
+     "name": "WS-I013-JAVA-00063"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-78"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-JAVA-00036##src/main/java/org/example/controller/SQLI.java##66##66##13##29",
+    "name": "Log Injection via Unsanitized User Input in SLF4J/Java Logging",
+    "filePath": "src/main/java/org/example/controller/SQLI.java",
+    "startLine": 66,
+    "endLine": 66,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "Untrusted user-controlled data flows directly into a logging statement without sanitization. This is known as log injection, where an attacker can embed newline characters (CR/LF) or other control sequences into log messages to forge additional log entries, making it appear as though legitimate even",
+    "rule": {
+     "id": "WS-JAVA-00036",
+     "name": "WS-JAVA-00036"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-117"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00102##src/main/java/org/example/controller/WebSockets.java##30##30##6##20",
+    "name": "Unrestricted Request Mapping in Spring MVC",
+    "filePath": "src/main/java/org/example/controller/WebSockets.java",
+    "startLine": 30,
+    "endLine": 30,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "This rule detects Spring MVC handler methods annotated with `@RequestMapping` that do not restrict the HTTP method. When `method` is omitted, the endpoint accepts all HTTP methods by default, including GET, HEAD, TRACE, and OPTIONS.\n\nSpring Security does not enable CSRF protection for those methods ",
+    "rule": {
+     "id": "WS-I013-JAVA-00102",
+     "name": "WS-I013-JAVA-00102"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-352"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00102##src/main/java/org/example/controller/QLExpress.java##31##31##6##20",
+    "name": "Unrestricted Request Mapping in Spring MVC",
+    "filePath": "src/main/java/org/example/controller/QLExpress.java",
+    "startLine": 31,
+    "endLine": 31,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "This rule detects Spring MVC handler methods annotated with `@RequestMapping` that do not restrict the HTTP method. When `method` is omitted, the endpoint accepts all HTTP methods by default, including GET, HEAD, TRACE, and OPTIONS.\n\nSpring Security does not enable CSRF protection for those methods ",
+    "rule": {
+     "id": "WS-I013-JAVA-00102",
+     "name": "WS-I013-JAVA-00102"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-352"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00018##src/main/java/org/example/controller/Login.java##42##42##13##40",
+    "name": "Missing Secure Flag on Cookies",
+    "filePath": "src/main/java/org/example/controller/Login.java",
+    "startLine": 42,
+    "endLine": 42,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "This rule detects instances where a cookie is created without the 'secure' flag being set. The 'secure' flag instructs the browser to only send the cookie over an encrypted HTTPS connection, preventing it from being transmitted over insecure HTTP channels. Failing to set the 'secure' flag on cookies",
+    "rule": {
+     "id": "WS-I013-JAVA-00018",
+     "name": "WS-I013-JAVA-00018"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-614"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00055##src/main/java/org/example/controller/Rce.java##94##101##5##6",
+    "name": "Code Injection via ScriptEngine Eval",
+    "filePath": "src/main/java/org/example/controller/Rce.java",
+    "startLine": 94,
+    "endLine": 101,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "This rule detects potential code injection vulnerabilities when using the ScriptEngine class in Java. The issue arises when user-controlled data enters the eval() method, allowing arbitrary code execution on the server.",
+    "rule": {
+     "id": "WS-I013-JAVA-00055",
+     "name": "WS-I013-JAVA-00055"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-94"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   },
+   {
+    "id": ".##WS-I013-JAVA-00017##src/main/java/org/example/controller/Login.java##42##42##13##40",
+    "name": "Missing HttpOnly Flag on Cookies",
+    "filePath": "src/main/java/org/example/controller/Login.java",
+    "startLine": 42,
+    "endLine": 42,
+    "severity": "LOW",
+    "origin": "WIZ",
+    "description": "The HttpOnly flag is a security measure that instructs web browsers to prevent client-side scripts from accessing cookies. When this flag is not set, it allows malicious scripts to access and potentially steal sensitive cookie data, leading to session hijacking or other attacks.",
+    "rule": {
+     "id": "WS-I013-JAVA-00017",
+     "name": "WS-I013-JAVA-00017"
+    },
+    "weaknesses": [
+     {
+      "id": "CWE-1004"
+     }
+    ],
+    "snippet": "---REDACTED---"
+   }
+  ],
+  "failedPolicyMatches": [
+   {
+    "policy": {
+     "id": "2eebe47f-7e69-4cd8-bd90-719359c37f4c",
+     "name": "Default SAST policy (Wiz CI/CD scan)",
+     "type": "SAST",
+     "params": {
+      "__typename": null
+     }
+    },
+    "ignoreReason": null,
+    "matchedIgnoreRules": null
+   }
+  ]
+ }
+}

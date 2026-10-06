@@ -1,0 +1,6 @@
+repositories:
+  svc-a:
+    repo_url: https://github.com/example-org/svc-a.git
+    max_tasks: eight
+    dry_run: sometimes
+    build_command: [make, test]

@@ -1,0 +1,4 @@
+repositories:
+  shared:
+    repo_url: https://github.com/example-org/from-yaml.git
+    schedule: "0 5 * * *"

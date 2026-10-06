@@ -1,0 +1,4 @@
+repositories:
+  svc-a:
+    repo_url: https://github.com/example-org/svc-a.git
+    schedule: ""

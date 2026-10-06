@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (not committed) and fill in, then run
+#   terraform init && terraform apply
+# from this directory. See docs/guides/gitops_cloud_build.md.
+
+project_id      = "your-project-id"
+region          = "us-central1"
+resource_prefix = "codemender" # 1-17 characters; the same prefix as deployment.yaml
+
+# The repository as linked to the Cloud Build 2nd-gen connection (created by
+# hand, in the same region).
+cloudbuild_repository = "projects/your-project-id/locations/us-central1/connections/your-connection/repositories/your-repository"
+
+# Optional:
+# branch                  = "main"
+# apply_requires_approval = false
+# image_requires_approval = false
+# approvers               = ["group:platform-admins@example.com"]
+# image_max_wait_hours    = 12

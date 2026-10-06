@@ -1,0 +1,77 @@
+{
+ "status": {
+  "state": "SUCCESS",
+  "verdict": "WARN_BY_POLICY"
+ },
+ "extraInfo": {
+  "clientName": "WizCLI",
+  "clientVersion": "1.75.0-154cc7e"
+ },
+ "policies": [
+  {
+   "id": "2eebe47f-7e69-4cd8-bd90-719359c37f4c",
+   "name": "Default SAST policy (Wiz CI/CD scan)",
+   "type": "SAST",
+   "params": {
+    "__typename": "cicdscanpolicyparamssast"
+   }
+  },
+  {
+   "id": "16facbd2-7003-4b3a-ba34-9e91edbea357",
+   "name": "Default malware policy",
+   "type": "MALWARE",
+   "params": {
+    "__typename": "cicdscanpolicyparamsmalware"
+   }
+  },
+  {
+   "id": "7aad6ebe-9f19-491e-8032-ecacd96fca7b",
+   "name": "Default vulnerabilities policy",
+   "type": "VULNERABILITIES",
+   "params": {
+    "__typename": "cicdscanpolicyparamsvulnerabilities"
+   }
+  },
+  {
+   "id": "7341c280-ecd2-4531-a013-f2b35d71433a",
+   "name": "Default secrets policy",
+   "type": "SECRETS",
+   "params": {
+    "__typename": "cicdscanpolicyparamssecrets"
+   }
+  },
+  {
+   "id": "b5398545-ec61-4095-879f-6ccd67dda8c8",
+   "name": "Default sensitive data policy",
+   "type": "SENSITIVE_DATA",
+   "params": {
+    "__typename": "cicdscanpolicyparamssensitivedata"
+   }
+  },
+  {
+   "id": "6d867007-3f02-4267-8b9a-0abe2ea602da",
+   "name": "Default IaC policy",
+   "type": "IAC",
+   "params": {
+    "__typename": "cicdscanpolicyparamsiac"
+   }
+  }
+ ],
+ "result": {
+  "sast": null,
+  "failedPolicyMatches": [
+   {
+    "policy": {
+     "id": "2eebe47f-7e69-4cd8-bd90-719359c37f4c",
+     "name": "Default SAST policy (Wiz CI/CD scan)",
+     "type": "SAST",
+     "params": {
+      "__typename": null
+     }
+    },
+    "ignoreReason": null,
+    "matchedIgnoreRules": null
+   }
+  ]
+ }
+}

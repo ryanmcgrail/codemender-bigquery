@@ -1,0 +1,116 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The image gets the latest CodeMender CLI release: _CM_VERSION is empty by
+# default, which downloads the "stable" release. scripts/ci/stage_cm.sh checks
+# the download against the SHA-256 that the CLI's Artifact Registry repository
+# publishes for it. To build with one exact binary instead, set _CM_VERSION and
+# _CM_SHA256 (the sha256 of the extracted cm) together. A pre-staged ./cm is
+# used as is (checked against _CM_SHA256 when that is set).
+#
+# The scheduled scans also update cm when they start (cm_auto_update in
+# deployment.yaml, on by default), so a scan runs the latest release even when
+# the image was built earlier.
+#
+# _IMAGE_TAG names the pushed image tag. _UPDATE_JOBS=false builds and pushes
+# the image without pointing the runner and worker Cloud Run jobs at it. To
+# trial a specific CLI release, for example:
+#   _CM_VERSION=<version>,_IMAGE_TAG=cm-<version>,_UPDATE_JOBS=false
+#
+# With _UPDATE_JOBS=true the image is also tagged :latest (the build cache),
+# and the last step points both jobs at the new image's digest, but only once
+# no scan is running: it re-checks every 60 seconds for up to _MAX_WAIT_HOURS
+# and fails without changing anything if the scans outlast that. See
+# scripts/ci/image_rollout.sh. The build timeout leaves room for that wait.
+
+steps:
+  # Step 1: Stage the cm binary (latest release unless _CM_VERSION is set)
+  - id: 'stage-cm'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args: ['scripts/ci/stage_cm.sh']
+    env:
+      - 'CM_VERSION=${_CM_VERSION}'
+      - 'CM_SHA256=${_CM_SHA256}'
+      - 'CM_FETCH=gcloud'
+
+  # Step 2: Pull cached image and build the container image
+  - id: 'build'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        BASE="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}"
+        TAGS=(-t "$${BASE}/orchestrator:${_IMAGE_TAG}" -t "$${BASE}/codemender-runner:${_IMAGE_TAG}")
+        if [ "${_UPDATE_JOBS}" = "true" ] && [ "${_IMAGE_TAG}" != "latest" ]; then
+          TAGS+=(-t "$${BASE}/orchestrator:latest" -t "$${BASE}/codemender-runner:latest")
+        fi
+        docker pull "$${BASE}/orchestrator:latest" || true
+        docker build --cache-from "$${BASE}/orchestrator:latest" "$${TAGS[@]}" .
+
+  # Step 3: Push the container image to Artifact Registry. :latest moves only
+  # for builds that also roll out (_UPDATE_JOBS=true), so a trial build never
+  # changes it.
+  - id: 'push'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        BASE="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}"
+        docker push "$${BASE}/orchestrator:${_IMAGE_TAG}"
+        docker push "$${BASE}/codemender-runner:${_IMAGE_TAG}"
+        if [ "${_UPDATE_JOBS}" = "true" ] && [ "${_IMAGE_TAG}" != "latest" ]; then
+          docker push "$${BASE}/orchestrator:latest"
+          docker push "$${BASE}/codemender-runner:latest"
+        fi
+
+  # Step 4: Once no scan is running, point the runner and worker Cloud Run
+  # jobs at the new image digest (skipped when _UPDATE_JOBS is not true).
+  - id: 'rollout'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args: ['scripts/ci/image_rollout.sh']
+    env:
+      - 'PROJECT_ID=${PROJECT_ID}'
+      - 'REGION=${_REGION}'
+      - 'REPO_NAME=${_REPO_NAME}'
+      - 'IMAGE_TAG=${_IMAGE_TAG}'
+      - 'UPDATE_JOBS=${_UPDATE_JOBS}'
+      - 'MAX_WAIT_HOURS=${_MAX_WAIT_HOURS}'
+      - 'POLL_SECONDS=60'
+
+# 13 hours: the default 12-hour wait for running scans plus the build itself.
+# Raise it together with _MAX_WAIT_HOURS (Cloud Build allows up to 24 hours).
+timeout: '46800s'
+
+options:
+  dynamicSubstitutions: true
+  # Required when a trigger runs the build as a user-managed service account.
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _RESOURCE_PREFIX: 'codemender'
+  _REPO_NAME: '${_RESOURCE_PREFIX}-runner'
+  _REGION: 'us-central1'
+  # Empty: the latest release, with no exact-binary pin. See the comment at
+  # the top.
+  _CM_VERSION: ''
+  _CM_SHA256: ''
+  _IMAGE_TAG: 'latest'
+  _UPDATE_JOBS: 'true'
+  _MAX_WAIT_HOURS: '12'

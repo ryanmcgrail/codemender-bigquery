@@ -1,0 +1,29 @@
+Discover security vulnerabilities in source code.
+
+When called without a subcommand, runs a quick scan (classifier only).
+
+  cm find <path>             Quick scan (May have false positives. Use 'cm verify' to triage.)
+
+Use 'cm verify <finding-id>' to verify a specific finding from a previous scan.
+
+Usage:
+  cm find [command]
+Flags:
+  -c, --context <text>           Additional context to guide the scan agent
+      --deep                     Exhaustive file-by-file deep scan of all discovered source files
+      --deep-workers int         Number of concurrent workers for deep scan (1 to 16, default: 8) (default 8)
+      --diff string[="HEAD"]     Scan modified files and 1-hop impacted callers from git diff (optional target ref, e.g. origin/main)
+      --diff-depth int           Impact resolution depth for --diff (default: 1-hop) (default 1)
+      --diff-max-neighbors int   Maximum number of 1-hop neighbor files to inspect (default: 10) (default 10)
+      --diff-workers int         Number of concurrent workers for --diff scan (1 to 16, default: 4) (default 4)
+      --fail-on string           Comma-separated severities that cause cm find to exit with code 1 in CI (CRITICAL,HIGH,MEDIUM,LOW) (default "CRITICAL,HIGH")
+      --fail-on-truncation       Fail with a non-zero exit code if 1-hop impact expansion exceeds the candidate cluster cap
+      --format string            Output format: table, json, sarif (default "table")
+  -h, --help                     help for find
+      --model string             LLM model to use (default "cm-default-model")
+      --output string            Write scan report to file instead of stdout
+      --staged                   When using --diff, scope diff to staged changes only (git diff --cached)
+      --unrestricted             Disable filesystem sandbox (allow agent to access any path)
+  -y, --yes                      Skip all confirmation prompts (commands and file writes)
+
+Use "cm find [command] --help" for more information about a command.
