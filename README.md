@@ -275,6 +275,32 @@ Known gaps:
 Pull request scans report differently; see
 [How it works](docs/how_it_works.md#pull-request-scans-github-actions).
 
+## Reprocess findings from BigQuery
+
+`codemender_bigquery_roundtrip.py` imports the latest actionable findings for
+one repository from `vulnerability_findings`, skips findings already present in
+the local CodeMender state, and runs `cm verify` followed by `cm fix` for
+verified findings. It merges the resulting state into
+`current_findings_by_id`, keyed by `(repository, finding_id)`. The
+historical `vulnerability_findings` table is not modified.
+
+Run it from the repository root with Application Default Credentials that can
+read the source table and create/update tables in the dataset, plus a local
+CodeMender checkout and installed `cm` binary:
+
+```bash
+python3 codemender_bigquery_roundtrip.py \
+    --repository your-org/your-repo \
+    --repo-dir /path/to/checkout \
+    --project your-gcp-project \
+    --dataset codemender_telemetry \
+    --dry-run
+```
+
+Remove `--dry-run` to import, verify, fix and upload the findings. Project and
+dataset can instead come from `CODEMENDER_BQ_PROJECT` and
+`CODEMENDER_BQ_DATASET` (or the ambient Google Cloud project).
+
 ## Security model
 
 *   **GitHub access through a GitHub App.** The App has only the repository

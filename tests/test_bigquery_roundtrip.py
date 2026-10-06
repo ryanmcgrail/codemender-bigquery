@@ -1,0 +1,246 @@
+"""Tests for the standalone BigQuery/CodeMender round-trip script."""
+
+import sys
+import tempfile
+import types
+import unittest
+from unittest.mock import patch
+
+import codemender_bigquery_roundtrip as roundtrip
+
+
+class _Job:
+  def result(self):
+    return []
+
+
+class _Field:
+  def __init__(self, name):
+    self.name = name
+
+
+class _Client:
+  def __init__(self):
+    self.queries = []
+    self.loaded = None
+    self.deleted = None
+
+  def query(self, query, **kwargs):
+    self.queries.append(query)
+    return _Job()
+
+  def get_table(self, table_id):
+    return types.SimpleNamespace(
+        schema=[
+            _Field("repository"),
+            _Field("fingerprint"),
+            _Field("finding_id"),
+            _Field("scan_id"),
+            _Field("scan_timestamp"),
+        ]
+    )
+
+  def load_table_from_json(self, rows, table_id, **kwargs):
+    self.loaded = (rows, table_id, kwargs)
+    return _Job()
+
+  def delete_table(self, table_id, **kwargs):
+    self.deleted = table_id
+
+
+class BigQueryRoundtripTests(unittest.TestCase):
+  def test_import_record_maps_telemetry_fields_to_cm_schema(self):
+    record = roundtrip.build_cm_import_record({
+        "repository": "acme/widgets",
+        "fingerprint": "abc123",
+        "file_path": "src/db.py",
+        "title": "SQL injection",
+        "analysis": "Untrusted input reaches a query.",
+        "severity": "HIGH",
+        "vuln_type": "SQL Injection",
+        "start_line": "12",
+        "end_line": 14,
+        "snippet": "query(user_input)",
+    })
+
+    self.assertEqual(record["file_path"], "src/db.py")
+    self.assertEqual(record["line"], 12)
+    self.assertEqual(record["end_line"], 14)
+    self.assertEqual(record["message"], "Untrusted input reaches a query.")
+    self.assertEqual(record["snippet"], "query(user_input)")
+    self.assertNotIn("fingerprint", record)
+
+  def test_rows_deduplicate_by_repository_and_finding_id(self):
+    rows = [
+        {"repository": "acme/widgets", "finding_id": "same", "title": "old"},
+        {"repository": "acme/widgets", "finding_id": "same", "title": "new"},
+        {"repository": "acme/api", "finding_id": "same", "title": "other repo"},
+    ]
+
+    result = roundtrip.deduplicate_rows_by_key(rows)
+
+    self.assertEqual(len(result), 2)
+    self.assertEqual(result[0]["title"], "new")
+
+  def test_imported_ids_keep_source_ids_when_report_order_differs(self):
+    source_rows = [
+        {
+            "repository": "acme/widgets",
+            "finding_id": "finding-a",
+            "file_path": "src/a.py",
+            "start_line": 10,
+            "title": "Finding A",
+            "vuln_type": "SQL Injection",
+        },
+        {
+            "repository": "acme/widgets",
+            "finding_id": "finding-b",
+            "file_path": "src/b.py",
+            "start_line": 20,
+            "title": "Finding B",
+            "vuln_type": "XSS",
+        },
+    ]
+    imported_findings = [
+        {
+            "FindingID": "cm-b",
+            "FilePath": "src/b.py",
+            "StartLine": 20,
+            "Title": "Finding B",
+            "VulnType": "XSS",
+        },
+        {
+            "FindingID": "cm-a",
+            "FilePath": "src/a.py",
+            "StartLine": 10,
+            "Title": "Finding A",
+            "VulnType": "SQL Injection",
+        },
+    ]
+
+    result = roundtrip._match_cm_findings_to_source_rows(
+        source_rows,
+        imported_findings,
+        "/tmp/widgets",
+        required_cm_ids=["cm-a", "cm-b"],
+    )
+
+    self.assertEqual(result, {"cm-a": "finding-a", "cm-b": "finding-b"})
+
+  def test_telemetry_mapping_preserves_source_finding_id(self):
+    finding = {
+        "FindingID": "cm-a",
+        "FilePath": "src/a.py",
+        "VulnType": "SQL Injection",
+        "StartLine": 10,
+        "Status": "VERIFIED",
+    }
+
+    row = roundtrip._to_telemetry_finding(
+      finding, "/tmp/widgets", "source-finding-id"
+    )
+
+    self.assertEqual(row["finding_id"], "source-finding-id")
+    self.assertEqual(row["vuln_type"], "SQL Injection")
+
+  def test_roundtrip_imports_verifies_fixes_and_uploads_source_key(self):
+    source = {
+        "repository": "acme/widgets",
+      "finding_id": "source-finding-id",
+        "fingerprint": "source-fingerprint",
+        "file_path": "src/db.py",
+        "title": "SQL injection",
+        "vuln_type": "SQL Injection",
+        "severity": "HIGH",
+        "start_line": 12,
+    }
+    imported = {
+        "FindingID": "cm-1",
+        "FilePath": "src/db.py",
+        "Title": "SQL injection",
+        "VulnType": "SQL Injection",
+        "StartLine": 12,
+        "Status": "OPEN",
+    }
+    verified = {**imported, "Status": "VERIFIED"}
+    fixed = {**verified, "Status": "FIXED"}
+
+    with tempfile.TemporaryDirectory() as repo_dir:
+      with (
+          patch.object(roundtrip, "fetch_latest_findings", return_value=[source]),
+          patch.object(
+              roundtrip,
+              "read_findings",
+              side_effect=[[], [verified], [fixed]],
+          ),
+          patch.object(
+              roundtrip,
+              "import_findings",
+              return_value=(["cm-1"], [imported]),
+          ),
+          patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
+          patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
+      ):
+        summary = roundtrip.run_roundtrip(
+            repository="acme/widgets",
+            repo_dir=repo_dir,
+            project="project",
+            dataset="dataset",
+            client=object(),
+        )
+
+    self.assertEqual(
+        [call.args[0] for call in cm_action.call_args_list], ["verify", "fix"]
+    )
+    self.assertEqual(
+      merge.call_args.args[3][0]["finding_id"], "source-finding-id"
+    )
+    self.assertEqual(summary["imported"], 1)
+    self.assertEqual(summary["verified"], 1)
+    self.assertEqual(summary["fixed"], 1)
+    self.assertEqual(summary["merged"], 1)
+
+  def test_latest_query_ranks_before_filtering_closed_status(self):
+    query = roundtrip._latest_findings_query("project.dataset.history")
+
+    self.assertIn("PARTITION BY repository, finding_id", query)
+    self.assertLess(query.index("QUALIFY ROW_NUMBER"), query.index("WHERE UPPER"))
+    self.assertIn("NULLIF(TRIM(finding_id), '') IS NOT NULL", query)
+
+  def test_merge_uses_composite_key_and_removes_staging_table(self):
+    fake_bigquery = types.ModuleType("google.cloud.bigquery")
+    fake_bigquery.LoadJobConfig = lambda **kwargs: kwargs
+    fake_bigquery.WriteDisposition = types.SimpleNamespace(WRITE_TRUNCATE="WRITE_TRUNCATE")
+    client = _Client()
+    row = {
+        "repository": "acme/widgets",
+        "fingerprint": "abc123",
+        "finding_id": "f-1",
+        "scan_id": "s-1",
+        "scan_timestamp": "2026-10-06T00:00:00+00:00",
+        "unexpected": "ignored by target schema",
+    }
+
+    with patch.dict(sys.modules, {"google.cloud.bigquery": fake_bigquery}):
+      merged = roundtrip.merge_current_findings(
+          client,
+          "project.dataset.history",
+          "project.dataset.current_findings",
+          [row],
+      )
+
+    self.assertEqual(merged, 1)
+    self.assertIn(
+        "ON T.repository = S.repository AND T.finding_id = S.finding_id",
+        client.queries[-1],
+    )
+    self.assertNotIn("unexpected", client.loaded[0][0])
+    self.assertTrue(client.deleted.startswith("project.dataset._cm_stage_"))
+
+  def test_composite_key_requires_both_parts(self):
+    with self.assertRaises(ValueError):
+      roundtrip.deduplicate_rows_by_key([{"repository": "acme/widgets"}])
+
+
+if __name__ == "__main__":
+  unittest.main()
