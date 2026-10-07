@@ -37,11 +37,6 @@ logger = logging.getLogger("codemender-bigquery-roundtrip")
 DEFAULT_SOURCE_TABLE = "vulnerability_findings"
 DEFAULT_TARGET_TABLE = "current_findings_by_id"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
-_CLOSED_STATUSES = frozenset(
-    {"FIXED", "REMEDIATED", "PATCHED", "DISMISSED", "FALSE_POSITIVE", "RESOLVED"}
-)
-_VERIFIED_STATUSES = frozenset({"VERIFIED", "CONFIRMED"})
-
 
 def _table_id(project: str, dataset: str, table: str) -> str:
   for value in (project, dataset, table):
@@ -327,30 +322,6 @@ def _to_telemetry_finding(
   return normalized
 
 
-def _verified(finding: Mapping[str, Any]) -> bool:
-  status = str(_finding_value(finding, "status", "Status") or "").upper()
-  verified = _finding_value(finding, "verified", "Verified")
-  return (
-      status in _VERIFIED_STATUSES
-      or verified is True
-      or verified == 1
-      or str(verified or "").strip().lower() in {"true", "yes"}
-  )
-
-
-def _run_cm_action(
-    action: str, finding_id: str, cm_binary: str, repo_dir: str,
-    cli_version: Optional[str],
-) -> int:
-  command = build_cm_command(
-      cm_binary, action, target_or_id=finding_id, cli_version=cli_version
-  )
-  result = run_command(command, cwd=repo_dir, check=False)
-  if result.returncode != 0:
-    logger.warning("cm %s failed for finding %s (exit %s).", action, finding_id, result.returncode)
-  return result.returncode
-
-
 def _run_cm_find(
     cm_binary: str, repo_dir: str, cli_version: Optional[str]
 ) -> None:
@@ -439,7 +410,6 @@ def run_roundtrip(
     cli_version: Optional[str] = None,
     location: Optional[str] = None,
     client: Any = None,
-    dry_run: bool = False,
 ) -> Dict[str, int]:
   """Runs the BigQuery -> cm import/verify/fix -> BigQuery round trip."""
   if not os.path.isdir(repo_dir):
@@ -455,26 +425,14 @@ def run_roundtrip(
     from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
     client = bigquery.Client(project=project)
-  if not dry_run:
-    ensure_dataset(client, project, dataset, location)
-    if source_table == DEFAULT_SOURCE_TABLE:
-      ensure_vulnerability_findings_table(client, project, dataset)
+  ensure_dataset(client, project, dataset, location)
+  if source_table == DEFAULT_SOURCE_TABLE:
+    ensure_vulnerability_findings_table(client, project, dataset)
   cm_binary = cm_binary or shutil.which("cm") or "cm"
 
   source_rows = fetch_latest_findings(
       client, source_table_id, repository, location=location
   )
-  if dry_run and not source_rows:
-    return {
-        "source_findings": 0,
-        "scanned_findings": 0,
-        "already_in_code_mender": 0,
-        "to_import": 0,
-        "imported": 0,
-        "verified": 0,
-        "fixed": 0,
-        "merged": 0,
-    }
 
   scanned_findings = 0
   if not source_rows:
@@ -521,19 +479,6 @@ def run_roundtrip(
     import_records = [build_cm_import_record(row) for row in import_rows]
     post_import_findings = list(before_findings)
 
-  scan_only = not source_rows
-  if dry_run:
-    return {
-        "source_findings": len(source_rows),
-        "scanned_findings": scanned_findings,
-        "already_in_code_mender": len(source_rows) - len(import_rows),
-        "to_import": len(import_records),
-        "imported": 0,
-        "verified": 0,
-        "fixed": 0,
-        "merged": 0,
-    }
-
   imported_ids: List[str] = []
   imported_source_ids: Dict[str, str] = {}
   if import_records:
@@ -552,34 +497,6 @@ def run_roundtrip(
   ids_to_process = set(source_ids_by_cm_id)
 
   findings_by_id = {_finding_id(row): row for row in post_import_findings}
-  verified_ids = set()
-  if not scan_only:
-    for finding_id in sorted(ids_to_process):
-      existing = findings_by_id.get(finding_id, {})
-      status = str(_finding_value(existing, "status", "Status") or "").upper()
-      if status in _CLOSED_STATUSES:
-        continue
-      if _verified(existing):
-        verified_ids.add(finding_id)
-        continue
-      if _run_cm_action("verify", finding_id, cm_binary, repo_dir, cli_version) != 0:
-        continue
-      current = read_findings(cm_binary, repo_dir, cli_version=cli_version)
-      verified_finding = next(
-          (row for row in current if _finding_id(row) == finding_id), None
-      )
-      if verified_finding is not None:
-        findings_by_id[finding_id] = verified_finding
-      if verified_finding is not None and _verified(verified_finding):
-        verified_ids.add(finding_id)
-
-  fix_attempted_ids = set()
-  for finding_id in sorted(verified_ids):
-    current = findings_by_id.get(finding_id, {})
-    if str(_finding_value(current, "status", "Status") or "").upper() in _CLOSED_STATUSES:
-      continue
-    fix_attempted_ids.add(finding_id)
-    _run_cm_action("fix", finding_id, cm_binary, repo_dir, cli_version)
 
   after_findings = (
       list(post_import_findings)
@@ -587,14 +504,7 @@ def run_roundtrip(
       else read_findings(cm_binary, repo_dir, cli_version=cli_version)
   )
   final_findings_by_id = {_finding_id(row): row for row in after_findings}
-  fixed_count = sum(
-      1
-      for finding_id in fix_attempted_ids
-      if str(
-          _finding_value(final_findings_by_id.get(finding_id, {}), "status", "Status")
-          or ""
-      ).upper() in {"FIXED", "REMEDIATED", "PATCHED"}
-  )
+
   findings_for_upload = [
       _to_telemetry_finding(
           finding, repo_dir, source_ids_by_cm_id.get(_finding_id(finding))
@@ -625,8 +535,6 @@ def run_roundtrip(
       "already_in_code_mender": len(source_rows) - len(import_rows),
       "to_import": len(import_records),
       "imported": len(imported_ids),
-      "verified": len(verified_ids),
-      "fixed": fixed_count,
       "merged": merged,
   }
 
@@ -683,7 +591,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cm_binary=args.cm_binary,
         cli_version=args.cli_version,
         location=args.location,
-        dry_run=args.dry_run,
     )
   except Exception as error:  # pylint: disable=broad-exception-caught
     logger.error("BigQuery CodeMender round-trip failed: %s", error)
