@@ -207,17 +207,16 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(
               roundtrip,
               "read_findings",
-              side_effect=[[], [verified], [fixed]],
+              side_effect=[[], [imported]],
           ),
           patch.object(
               roundtrip,
               "import_findings",
               return_value=(["cm-1"], [imported]),
           ),
-          patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
-            patch.object(roundtrip, "ensure_dataset"),
-            patch.object(roundtrip, "ensure_vulnerability_findings_table"),
+          patch.object(roundtrip, "ensure_dataset"),
+          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",
@@ -228,14 +227,9 @@ class BigQueryRoundtripTests(unittest.TestCase):
         )
 
     self.assertEqual(
-        [call.args[0] for call in cm_action.call_args_list], ["verify", "fix"]
-    )
-    self.assertEqual(
       merge.call_args.args[3][0]["finding_id"], "source-finding-id"
     )
     self.assertEqual(summary["imported"], 1)
-    self.assertEqual(summary["verified"], 1)
-    self.assertEqual(summary["fixed"], 1)
     self.assertEqual(summary["merged"], 1)
 
   def test_roundtrip_scans_and_uploads_without_verify_or_fix_when_source_empty(self):
@@ -247,8 +241,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
         "StartLine": 25,
         "Status": "OPEN",
     }
-    verified = {**discovered, "Status": "VERIFIED"}
-    fixed = {**verified, "Status": "FIXED"}
     with tempfile.TemporaryDirectory() as repo_dir:
       with (
           patch.object(roundtrip, "fetch_latest_findings", return_value=[]),
@@ -258,7 +250,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
               side_effect=[[], [discovered]],
           ),
           patch.object(roundtrip, "_run_cm_find") as cm_find,
-          patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
           patch.object(roundtrip, "ensure_dataset"),
           patch.object(roundtrip, "ensure_vulnerability_findings_table"),
@@ -272,12 +263,9 @@ class BigQueryRoundtripTests(unittest.TestCase):
         )
 
     cm_find.assert_called_once()
-    cm_action.assert_not_called()
     self.assertEqual(merge.call_args.args[3][0]["finding_id"], "cm-new")
     self.assertEqual(summary["source_findings"], 0)
     self.assertEqual(summary["scanned_findings"], 1)
-    self.assertEqual(summary["verified"], 0)
-    self.assertEqual(summary["fixed"], 0)
     self.assertEqual(summary["merged"], 1)
 
   def test_latest_query_ranks_before_filtering_closed_status(self):

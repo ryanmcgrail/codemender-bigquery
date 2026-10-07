@@ -30,131 +30,29 @@ from codemender_agent.codemender.cli import is_ci_gate_exit
 from codemender_agent.telemetry import bigquery as telemetry
 from codemender_agent.utils import build_cm_command
 from codemender_agent.utils import run_command
-from codemender_agent.vcs.git import compute_finding_fingerprint
-from codemender_agent.vcs.git import normalize_repo_relative_path
+
+from fetch_bigquery_findings import (
+    DEFAULT_TABLE,
+    _finding_id,
+    _finding_value,
+    _int_or_none,
+    _is_repo_finding,
+    _latest_findings_query,
+    _resolve_project,
+    _row_key,
+    _table_id,
+    _text,
+    build_cm_import_record,
+    compute_finding_fingerprint,
+    deduplicate_rows_by_key,
+    ensure_dataset,
+    fetch_latest_findings,
+    normalize_repo_relative_path,
+    resolve_dataset,
+    resolve_project,
+)
 
 logger = logging.getLogger("codemender-bigquery-roundtrip")
-
-DEFAULT_TABLE = "findings"
-_TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
-
-def _table_id(project: str, dataset: str, table: str) -> str:
-  for value in (project, dataset, table):
-    if not _TABLE_COMPONENT.fullmatch(value):
-      raise ValueError(f"Invalid BigQuery identifier component: {value!r}")
-  return f"{project}.{dataset}.{table}"
-
-
-def ensure_dataset(
-    client: Any, project: str, dataset: str, location: Optional[str] = None,
-) -> None:
-  """Creates the configured BigQuery dataset if it does not already exist."""
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  dataset_resource = bigquery.Dataset(f"{project}.{dataset}")
-  if location:
-    dataset_resource.location = location
-  client.create_dataset(dataset_resource, exists_ok=True)
-
-
-def _text(row: Mapping[str, Any], key: str) -> str:
-  value = row.get(key)
-  return str(value).strip() if value is not None else ""
-
-
-def _int_or_none(value: Any) -> Optional[int]:
-  try:
-    return int(value) if value is not None and str(value).strip() else None
-  except (TypeError, ValueError):
-    return None
-
-
-def _row_key(row: Mapping[str, Any]) -> Tuple[str, str]:
-  repository = _text(row, "repository")
-  finding_id = _text(row, "finding_id")
-  if not repository or not finding_id:
-    raise ValueError("A unique finding must have repository and finding_id")
-  return repository, finding_id
-
-
-def build_cm_import_record(row: Mapping[str, Any]) -> Dict[str, Any]:
-  """Converts one telemetry row to the simple-JSON dialect accepted by cm."""
-  file_path = _text(row, "file_path")
-  if not file_path:
-    raise ValueError("A BigQuery finding without file_path cannot be imported")
-
-  title = _text(row, "title") or _text(row, "vuln_type") or "CodeMender finding"
-  record: Dict[str, Any] = {
-      "file_path": file_path,
-      "title": title,
-      "message": _text(row, "analysis") or "Imported from CodeMender BigQuery findings.",
-      "severity": _text(row, "severity") or "MEDIUM",
-      "vuln_type": _text(row, "vuln_type") or _text(row, "cwe_id") or title,
-  }
-  for source, destination in (("start_line", "line"), ("end_line", "end_line")):
-    line = _int_or_none(row.get(source))
-    if line is not None:
-      record[destination] = line
-  snippet = _text(row, "snippet")
-  if snippet:
-    record["snippet"] = snippet
-  return record
-
-
-def deduplicate_rows_by_key(
-    rows: Iterable[Mapping[str, Any]],
-) -> List[Dict[str, Any]]:
-  """Keeps the last row for each repository/finding_id pair."""
-  keyed: Dict[Tuple[str, str], Dict[str, Any]] = {}
-  for row in rows:
-    keyed[_row_key(row)] = dict(row)
-  return list(keyed.values())
-
-
-def _latest_findings_query(table_id: str) -> str:
-  return f"""
-SELECT * FROM (
-  SELECT *
-  FROM `{table_id}`
-  WHERE repository = @repository
-    AND NULLIF(TRIM(finding_id), '') IS NOT NULL
-    AND NULLIF(TRIM(file_path), '') IS NOT NULL
-  QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY repository, finding_id
-    ORDER BY scan_timestamp DESC, scan_id DESC
-  ) = 1
-)
-WHERE UPPER(COALESCE(status, '')) NOT IN (
-  'FIXED', 'REMEDIATED', 'PATCHED', 'DISMISSED', 'FALSE_POSITIVE', 'RESOLVED'
-)
-"""
-
-
-def fetch_latest_findings(
-    client: Any,
-    table_id: str,
-    repository: str,
-    location: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-  """Loads one latest actionable source row per repository/finding_id."""
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  try:
-    config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("repository", "STRING", repository)]
-    )
-    rows = client.query(
-        _latest_findings_query(table_id), job_config=config, location=location
-    ).result()
-
-    return [dict(row.items()) for row in rows]
-  except:
-    return []
-
-
-def _finding_value(finding: Mapping[str, Any], snake: str, pascal: str) -> Any:
-  value = finding.get(snake)
-  return finding.get(pascal) if value is None else value
 
 
 def _fingerprint_for_cm_finding(
@@ -172,23 +70,6 @@ def _fingerprint_for_cm_finding(
   return compute_finding_fingerprint(
       path, str(vuln_type or "vulnerability"), _int_or_none(start_line) or 0
   )
-
-
-def _finding_id(finding: Mapping[str, Any]) -> str:
-  value = _finding_value(finding, "finding_id", "FindingID")
-  return str(value) if value else ""
-
-
-def _is_repo_finding(finding: Mapping[str, Any], repo_dir: str) -> bool:
-  file_path = _finding_value(finding, "file_path", "FilePath")
-  if not file_path:
-    return False
-  clean_repo = os.path.abspath(repo_dir).replace("\\", "/")
-  raw = str(file_path).strip().replace("\\", "/")
-  if os.path.isabs(raw):
-    clean_path = os.path.abspath(raw).replace("\\", "/")
-    return clean_path == clean_repo or clean_path.startswith(clean_repo + "/")
-  return not raw.startswith("/")
 
 
 def _match_cm_findings_to_source_rows(
@@ -295,15 +176,89 @@ def _run_cm_find(
     raise RuntimeError(f"cm find failed with exit code {returncode}")
 
 
+def _run_cm_action(
+    action: str, finding_id: str, cm_binary: str, repo_dir: str,
+    cli_version: Optional[str] = None,
+) -> int:
+  command = build_cm_command(
+      cm_binary, action, target_or_id=finding_id, cli_version=cli_version
+  )
+  result = run_command(command, cwd=repo_dir, check=False)
+  returncode = getattr(result, "returncode", 0)
+  if returncode != 0:
+    logger.warning("cm %s failed for finding %s (exit %s).", action, finding_id, returncode)
+  return returncode
+
+
+def ensure_vulnerability_findings_table(
+    client: Any,
+    project: str,
+    dataset: str,
+    table_name: str = DEFAULT_TABLE,
+) -> None:
+  """Creates the telemetry-compatible source findings table when absent."""
+  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
+
+  schema = [
+      bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
+      bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
+      bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
+      bigquery.SchemaField("repository", "STRING"),
+      bigquery.SchemaField("title", "STRING"),
+      bigquery.SchemaField("vuln_type", "STRING"),
+      bigquery.SchemaField("cwe_id", "STRING"),
+      bigquery.SchemaField("severity", "STRING"),
+      bigquery.SchemaField("confidence_level", "STRING"),
+      bigquery.SchemaField("file_path", "STRING"),
+      bigquery.SchemaField("start_line", "INTEGER"),
+      bigquery.SchemaField("end_line", "INTEGER"),
+      bigquery.SchemaField("status", "STRING"),
+      bigquery.SchemaField("source_stage", "STRING"),
+      bigquery.SchemaField("verified", "BOOLEAN"),
+      bigquery.SchemaField("muted", "BOOLEAN"),
+      bigquery.SchemaField("mute_reason", "STRING"),
+      bigquery.SchemaField("fingerprint", "STRING"),
+      bigquery.SchemaField("fix_pr_url", "STRING"),
+      bigquery.SchemaField("patch_status", "STRING"),
+      bigquery.SchemaField("analysis", "STRING"),
+      bigquery.SchemaField("snippet", "STRING"),
+      bigquery.SchemaField("finding_source", "STRING"),
+  ]
+  table = bigquery.Table(
+      _table_id(project, dataset, table_name), schema=schema
+  )
+  table.time_partitioning = bigquery.TimePartitioning(
+      type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
+  )
+  table.clustering_fields = ["repository", "severity", "vuln_type"]
+  table.description = "One row per CodeMender vulnerability finding."
+  client.create_table(table, exists_ok=True)
+
+
 def merge_current_findings(
     client: Any,
     table_id: str,
-    rows: Sequence[Mapping[str, Any]],
+    *args: Any,
     location: Optional[str] = None,
+    **kwargs: Any,
 ) -> int:
   """MERGEs rows by repository/finding_id into a separate current-state table."""
+  if len(args) >= 2:
+    target_table_id = str(args[0])
+    rows = args[1]
+    if len(args) >= 3 and location is None:
+      location = args[2]
+  elif len(args) == 1:
+    target_table_id = table_id
+    rows = args[0]
+  else:
+    target_table_id = table_id
+    rows = kwargs.get("rows", [])
+
   if not rows:
     return 0
+
+  table_id = target_table_id
 
   client.query(
       f"CREATE TABLE IF NOT EXISTS `{table_id}` "
@@ -399,6 +354,7 @@ def run_roundtrip(
 
   _print_heading("Running CodeMender find on repository...")
   scanned_findings = 0
+  scan_only = not source_rows
   if not source_rows:
     before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
     before_ids = {_finding_id(finding) for finding in before_findings}
@@ -509,7 +465,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
   parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
   parser.add_argument("--project", default=_resolve_project())
-  parser.add_argument("--dataset", default=telemetry.resolve_dataset())
+  parser.add_argument("--dataset", default=resolve_dataset())
   parser.add_argument("--table", default=DEFAULT_TABLE)
   parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
   parser.add_argument("--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"))
@@ -521,24 +477,6 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   if not args.dataset:
     parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
   return args
-
-
-def _resolve_project() -> Optional[str]:
-  project = telemetry.resolve_project()
-  if project:
-    return project
-  try:
-    result = subprocess.run(
-        ["gcloud", "config", "get-value", "project"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
-    )
-  except (OSError, subprocess.SubprocessError):
-    return None
-  project = (result.stdout or "").strip()
-  return project if result.returncode == 0 and project and project != "(unset)" else None
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
