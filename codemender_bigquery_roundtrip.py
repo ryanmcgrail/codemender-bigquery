@@ -294,68 +294,108 @@ def _match_cm_findings_to_source_rows(
   return source_ids_by_cm_id
 
 
-if __name__ == "__main__":
-  sys.exit(main())
+def _to_telemetry_finding(
+  finding: Mapping[str, Any], repo_dir: str, source_finding_id: Optional[str] = None,
+) -> Dict[str, Any]:
+  """Maps canonical or snake_case cm report output to the telemetry mapper."""
+  field_names = (
+      "title", "file_path", "severity", "confidence", "confidence_level",
+      "analysis", "snippet", "vuln_type", "vuln_id", "verified", "muted",
+      "mute_reason", "status", "source_stage", "start_line", "end_line",
+      "dismiss_reason", "updated_at",
+  )
+  normalized = {
+      "finding_id": _finding_id(finding),
+      "fingerprint": _fingerprint_for_cm_finding(finding, repo_dir),
+  }
+  aliases = {
+      "confidence_level": "ConfidenceLevel",
+      "vuln_id": "VulnID",
+  }
+  for field in field_names:
+    pascal = aliases.get(field, "".join(part.capitalize() for part in field.split("_")))
+    value = _finding_value(finding, field, pascal)
+    if value is not None:
+      normalized[field] = value
+  if source_finding_id:
+    normalized["finding_id"] = source_finding_id
+  return normalized
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
-  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-  args = _parse_args(argv)
-  try:
-    summary = run_roundtrip(
-        repository=args.repository,
-        repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
-        project=args.project,
-        dataset=args.dataset,
-        source_table=args.source_table,
-        target_table=args.target_table,
-        cm_binary=args.cm_binary,
-        cli_version=args.cli_version,
-        location=args.location,
+def _run_cm_find(
+    cm_binary: str, repo_dir: str, cli_version: Optional[str]
+) -> None:
+  command = build_cm_command(
+      cm_binary, "find", target_or_id=repo_dir, cli_version=cli_version
+  )
+  result = run_command(command, cwd=repo_dir, check=False)
+  returncode = getattr(result, "returncode", 0)
+  stdout = getattr(result, "stdout", "")
+  if returncode and not is_ci_gate_exit(returncode, stdout or ""):
+    raise RuntimeError(f"cm find failed with exit code {returncode}")
+
+
+def merge_current_findings(
+    client: Any,
+    source_table_id: str,
+    target_table_id: str,
+    rows: Sequence[Mapping[str, Any]],
+    location: Optional[str] = None,
+) -> int:
+  """MERGEs rows by repository/finding_id into a separate current-state table."""
+  if not rows:
+    return 0
+  if source_table_id == target_table_id:
+    raise ValueError("The current-state target must differ from the history source table")
+
+  client.query(
+      f"CREATE TABLE IF NOT EXISTS `{target_table_id}` "
+      f"AS SELECT * FROM `{source_table_id}` WHERE FALSE",
+      location=location,
+  ).result()
+  target_table = client.get_table(target_table_id)
+  schema = target_table.schema
+  columns = [field.name for field in schema]
+  identity = {"repository", "finding_id"}
+  missing_identity = identity.difference(columns)
+  if missing_identity:
+    raise ValueError(
+        "Current-state table is missing key columns: "
+        + ", ".join(sorted(missing_identity))
     )
-  except Exception as error:  # pylint: disable=broad-exception-caught
-    logger.error("BigQuery CodeMender round-trip failed: %s", error)
-    return 1
-  print(json.dumps(summary, indent=2))
-  return 0
 
+  unique_rows = deduplicate_rows_by_key(rows)
+  staged_rows = [
+      {key: value for key, value in row.items() if key in columns}
+      for row in unique_rows
+  ]
+  stage_table_id = f"{target_table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
+  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
-def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
-  parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
-  parser.add_argument("--project", default=_resolve_project())
-  parser.add_argument("--dataset", default=telemetry.resolve_dataset())
-  parser.add_argument("--source-table", default=DEFAULT_SOURCE_TABLE)
-  parser.add_argument("--target-table", default=DEFAULT_TARGET_TABLE)
-  parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
-  parser.add_argument("--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"))
-  parser.add_argument("--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"))
-  parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")
-  args = parser.parse_args(argv)
-  if not args.project:
-    parser.error("--project or CODEMENDER_BQ_PROJECT/GOOGLE_CLOUD_PROJECT is required")
-  if not args.dataset:
-    parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
-  return args
-
-
-def _resolve_project() -> Optional[str]:
-  project = telemetry.resolve_project()
-  if project:
-    return project
   try:
-    result = subprocess.run(
-        ["gcloud", "config", "get-value", "project"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
+    job_config = bigquery.LoadJobConfig(
+        schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
     )
-  except (OSError, subprocess.SubprocessError):
-    return None
-  project = (result.stdout or "").strip()
-  return project if result.returncode == 0 and project and project != "(unset)" else None
+    client.load_table_from_json(
+      staged_rows, stage_table_id, job_config=job_config, location=location
+    ).result()
+
+    columns_sql = ", ".join(f"`{column}`" for column in columns)
+    updates_sql = ", ".join(
+        f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
+    )
+    values_sql = ", ".join(f"S.`{column}`" for column in columns)
+    merge_sql = f"""
+MERGE `{target_table_id}` AS T
+USING `{stage_table_id}` AS S
+ON T.repository = S.repository AND T.finding_id = S.finding_id
+WHEN MATCHED THEN UPDATE SET {updates_sql}
+WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
+"""
+    client.query(merge_sql, location=location).result()
+    return len(unique_rows)
+  finally:
+    client.delete_table(stage_table_id, not_found_ok=True)
 
 
 def run_roundtrip(
@@ -499,105 +539,65 @@ def run_roundtrip(
   }
 
 
-def _run_cm_find(
-    cm_binary: str, repo_dir: str, cli_version: Optional[str]
-) -> None:
-  command = build_cm_command(
-      cm_binary, "find", target_or_id=repo_dir, cli_version=cli_version
-  )
-  result = run_command(command, cwd=repo_dir, check=False)
-  returncode = getattr(result, "returncode", 0)
-  stdout = getattr(result, "stdout", "")
-  if returncode and not is_ci_gate_exit(returncode, stdout or ""):
-    raise RuntimeError(f"cm find failed with exit code {returncode}")
+def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
+  parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
+  parser.add_argument("--project", default=_resolve_project())
+  parser.add_argument("--dataset", default=telemetry.resolve_dataset())
+  parser.add_argument("--source-table", default=DEFAULT_SOURCE_TABLE)
+  parser.add_argument("--target-table", default=DEFAULT_TARGET_TABLE)
+  parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
+  parser.add_argument("--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"))
+  parser.add_argument("--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"))
+  parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")
+  args = parser.parse_args(argv)
+  if not args.project:
+    parser.error("--project or CODEMENDER_BQ_PROJECT/GOOGLE_CLOUD_PROJECT is required")
+  if not args.dataset:
+    parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
+  return args
 
 
-def _to_telemetry_finding(
-  finding: Mapping[str, Any], repo_dir: str, source_finding_id: Optional[str] = None,
-) -> Dict[str, Any]:
-  """Maps canonical or snake_case cm report output to the telemetry mapper."""
-  field_names = (
-      "title", "file_path", "severity", "confidence", "confidence_level",
-      "analysis", "snippet", "vuln_type", "vuln_id", "verified", "muted",
-      "mute_reason", "status", "source_stage", "start_line", "end_line",
-      "dismiss_reason", "updated_at",
-  )
-  normalized = {
-      "finding_id": _finding_id(finding),
-      "fingerprint": _fingerprint_for_cm_finding(finding, repo_dir),
-  }
-  aliases = {
-      "confidence_level": "ConfidenceLevel",
-      "vuln_id": "VulnID",
-  }
-  for field in field_names:
-    pascal = aliases.get(field, "".join(part.capitalize() for part in field.split("_")))
-    value = _finding_value(finding, field, pascal)
-    if value is not None:
-      normalized[field] = value
-  if source_finding_id:
-    normalized["finding_id"] = source_finding_id
-  return normalized
-
-
-def merge_current_findings(
-    client: Any,
-    source_table_id: str,
-    target_table_id: str,
-    rows: Sequence[Mapping[str, Any]],
-    location: Optional[str] = None,
-) -> int:
-  """MERGEs rows by repository/finding_id into a separate current-state table."""
-  if not rows:
-    return 0
-  if source_table_id == target_table_id:
-    raise ValueError("The current-state target must differ from the history source table")
-
-  client.query(
-      f"CREATE TABLE IF NOT EXISTS `{target_table_id}` "
-      f"AS SELECT * FROM `{source_table_id}` WHERE FALSE",
-      location=location,
-  ).result()
-  target_table = client.get_table(target_table_id)
-  schema = target_table.schema
-  columns = [field.name for field in schema]
-  identity = {"repository", "finding_id"}
-  missing_identity = identity.difference(columns)
-  if missing_identity:
-    raise ValueError(
-        "Current-state table is missing key columns: "
-        + ", ".join(sorted(missing_identity))
-    )
-
-  unique_rows = deduplicate_rows_by_key(rows)
-  staged_rows = [
-      {key: value for key, value in row.items() if key in columns}
-      for row in unique_rows
-  ]
-  stage_table_id = f"{target_table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
+def _resolve_project() -> Optional[str]:
+  project = telemetry.resolve_project()
+  if project:
+    return project
   try:
-    job_config = bigquery.LoadJobConfig(
-        schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+    result = subprocess.run(
+        ["gcloud", "config", "get-value", "project"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
     )
-    client.load_table_from_json(
-      staged_rows, stage_table_id, job_config=job_config, location=location
-    ).result()
+  except (OSError, subprocess.SubprocessError):
+    return None
+  project = (result.stdout or "").strip()
+  return project if result.returncode == 0 and project and project != "(unset)" else None
 
-    columns_sql = ", ".join(f"`{column}`" for column in columns)
-    updates_sql = ", ".join(
-        f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+  args = _parse_args(argv)
+  try:
+    summary = run_roundtrip(
+        repository=args.repository,
+        repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
+        project=args.project,
+        dataset=args.dataset,
+        source_table=args.source_table,
+        target_table=args.target_table,
+        cm_binary=args.cm_binary,
+        cli_version=args.cli_version,
+        location=args.location,
     )
-    values_sql = ", ".join(f"S.`{column}`" for column in columns)
-    merge_sql = f"""
-MERGE `{target_table_id}` AS T
-USING `{stage_table_id}` AS S
-ON T.repository = S.repository AND T.finding_id = S.finding_id
-WHEN MATCHED THEN UPDATE SET {updates_sql}
-WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
-"""
-    client.query(merge_sql, location=location).result()
-    return len(unique_rows)
-  finally:
-    client.delete_table(stage_table_id, not_found_ok=True)
+  except Exception as error:  # pylint: disable=broad-exception-caught
+    logger.error("BigQuery CodeMender round-trip failed: %s", error)
+    return 1
+  print(json.dumps(summary, indent=2))
+  return 0
+
+
+if __name__ == "__main__":
+  sys.exit(main())
