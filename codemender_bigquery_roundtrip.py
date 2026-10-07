@@ -14,13 +14,14 @@ import argparse
 import json
 import logging
 import os
+from pprint import pprint
 import re
 import shutil
 import sys
 import subprocess
 import tempfile
-import uuid
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+import uuid
 
 from codemender_agent.codemender.importer import import_findings
 from codemender_agent.codemender.importer import read_findings
@@ -34,8 +35,7 @@ from codemender_agent.vcs.git import normalize_repo_relative_path
 
 logger = logging.getLogger("codemender-bigquery-roundtrip")
 
-DEFAULT_SOURCE_TABLE = "vulnerability_findings"
-DEFAULT_TARGET_TABLE = "current_findings_by_id"
+DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
 
 def _table_id(project: str, dataset: str, table: str) -> str:
@@ -55,50 +55,6 @@ def ensure_dataset(
   if location:
     dataset_resource.location = location
   client.create_dataset(dataset_resource, exists_ok=True)
-
-
-def ensure_vulnerability_findings_table(
-    client: Any,
-    project: str,
-    dataset: str,
- ) -> None:
-  """Creates the telemetry-compatible source findings table when absent."""
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  schema = [
-      bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
-      bigquery.SchemaField("repository", "STRING"),
-      bigquery.SchemaField("title", "STRING"),
-      bigquery.SchemaField("vuln_type", "STRING"),
-      bigquery.SchemaField("cwe_id", "STRING"),
-      bigquery.SchemaField("severity", "STRING"),
-      bigquery.SchemaField("confidence_level", "STRING"),
-      bigquery.SchemaField("file_path", "STRING"),
-      bigquery.SchemaField("start_line", "INTEGER"),
-      bigquery.SchemaField("end_line", "INTEGER"),
-      bigquery.SchemaField("status", "STRING"),
-      bigquery.SchemaField("source_stage", "STRING"),
-      bigquery.SchemaField("verified", "BOOLEAN"),
-      bigquery.SchemaField("muted", "BOOLEAN"),
-      bigquery.SchemaField("mute_reason", "STRING"),
-      bigquery.SchemaField("fingerprint", "STRING"),
-      bigquery.SchemaField("fix_pr_url", "STRING"),
-      bigquery.SchemaField("patch_status", "STRING"),
-      bigquery.SchemaField("analysis", "STRING"),
-      bigquery.SchemaField("snippet", "STRING"),
-      bigquery.SchemaField("finding_source", "STRING"),
-  ]
-  table = bigquery.Table(
-      _table_id(project, dataset, DEFAULT_SOURCE_TABLE), schema=schema
-  )
-  table.time_partitioning = bigquery.TimePartitioning(
-      type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
-  )
-  table.clustering_fields = ["repository", "severity", "vuln_type"]
-  table.description = "One row per CodeMender vulnerability finding."
-  client.create_table(table, exists_ok=True)
 
 
 def _text(row: Mapping[str, Any], key: str) -> str:
@@ -155,11 +111,11 @@ def deduplicate_rows_by_key(
   return list(keyed.values())
 
 
-def _latest_findings_query(source_table_id: str) -> str:
+def _latest_findings_query(table_id: str) -> str:
   return f"""
 SELECT * FROM (
   SELECT *
-  FROM `{source_table_id}`
+  FROM `{table_id}`
   WHERE repository = @repository
     AND NULLIF(TRIM(finding_id), '') IS NOT NULL
     AND NULLIF(TRIM(file_path), '') IS NOT NULL
@@ -176,20 +132,24 @@ WHERE UPPER(COALESCE(status, '')) NOT IN (
 
 def fetch_latest_findings(
     client: Any,
-    source_table_id: str,
+    table_id: str,
     repository: str,
     location: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
   """Loads one latest actionable source row per repository/finding_id."""
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
-  config = bigquery.QueryJobConfig(
-      query_parameters=[bigquery.ScalarQueryParameter("repository", "STRING", repository)]
-  )
-  rows = client.query(
-      _latest_findings_query(source_table_id), job_config=config, location=location
-  ).result()
-  return [dict(row.items()) for row in rows]
+  try:
+    config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("repository", "STRING", repository)]
+    )
+    rows = client.query(
+        _latest_findings_query(table_id), job_config=config, location=location
+    ).result()
+
+    return [dict(row.items()) for row in rows]
+  except:
+    return []
 
 
 def _finding_value(finding: Mapping[str, Any], snake: str, pascal: str) -> Any:
@@ -337,23 +297,20 @@ def _run_cm_find(
 
 def merge_current_findings(
     client: Any,
-    source_table_id: str,
-    target_table_id: str,
+    table_id: str,
     rows: Sequence[Mapping[str, Any]],
     location: Optional[str] = None,
 ) -> int:
   """MERGEs rows by repository/finding_id into a separate current-state table."""
   if not rows:
     return 0
-  if source_table_id == target_table_id:
-    raise ValueError("The current-state target must differ from the history source table")
 
   client.query(
-      f"CREATE TABLE IF NOT EXISTS `{target_table_id}` "
-      f"AS SELECT * FROM `{source_table_id}` WHERE FALSE",
+      f"CREATE TABLE IF NOT EXISTS `{table_id}` "
+      f"AS SELECT * FROM `{table_id}` WHERE FALSE",
       location=location,
   ).result()
-  target_table = client.get_table(target_table_id)
+  target_table = client.get_table(table_id)
   schema = target_table.schema
   columns = [field.name for field in schema]
   identity = {"repository", "finding_id"}
@@ -369,7 +326,7 @@ def merge_current_findings(
       {key: value for key, value in row.items() if key in columns}
       for row in unique_rows
   ]
-  stage_table_id = f"{target_table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
+  stage_table_id = f"{table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
   try:
@@ -386,7 +343,7 @@ def merge_current_findings(
     )
     values_sql = ", ".join(f"S.`{column}`" for column in columns)
     merge_sql = f"""
-MERGE `{target_table_id}` AS T
+MERGE `{table_id}` AS T
 USING `{stage_table_id}` AS S
 ON T.repository = S.repository AND T.finding_id = S.finding_id
 WHEN MATCHED THEN UPDATE SET {updates_sql}
@@ -398,14 +355,21 @@ WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
     client.delete_table(stage_table_id, not_found_ok=True)
 
 
+def _print_heading(title: str):
+  print()
+  print("#########################")
+  print("## " + title)
+  print("#########################")
+  print()
+
+
 def run_roundtrip(
     *,
     repository: str,
     repo_dir: str,
     project: str,
     dataset: str,
-    source_table: str = DEFAULT_SOURCE_TABLE,
-    target_table: str = DEFAULT_TARGET_TABLE,
+    table: str = DEFAULT_TABLE,
     cm_binary: Optional[str] = None,
     cli_version: Optional[str] = None,
     location: Optional[str] = None,
@@ -416,24 +380,24 @@ def run_roundtrip(
     raise ValueError(f"Repository directory does not exist: {repo_dir}")
   if not repository.strip():
     raise ValueError("Repository name must not be empty")
-  source_table_id = _table_id(project, dataset, source_table)
-  target_table_id = _table_id(project, dataset, target_table)
-  if source_table_id == target_table_id:
-    raise ValueError("The current-state target must differ from the history source table")
+  table_id = _table_id(project, dataset, table)
 
   if client is None:
     from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
     client = bigquery.Client(project=project)
-  ensure_dataset(client, project, dataset, location)
-  if source_table == DEFAULT_SOURCE_TABLE:
-    ensure_vulnerability_findings_table(client, project, dataset)
   cm_binary = cm_binary or shutil.which("cm") or "cm"
 
+  _print_heading("Fetching latest findings from BigQuery...")
+  ensure_dataset(client, project, dataset, location)
   source_rows = fetch_latest_findings(
-      client, source_table_id, repository, location=location
+      client, table_id, repository, location=location
   )
 
+  print("Previous findings:")
+  pprint(source_rows, indent = 2)
+
+  _print_heading("Running CodeMender find on repository...")
   scanned_findings = 0
   if not source_rows:
     before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
@@ -505,6 +469,7 @@ def run_roundtrip(
   )
   final_findings_by_id = {_finding_id(row): row for row in after_findings}
 
+  _print_heading("Exporting findings to BigQuery...")
   findings_for_upload = [
       _to_telemetry_finding(
           finding, repo_dir, source_ids_by_cm_id.get(_finding_id(finding))
@@ -524,8 +489,8 @@ def run_roundtrip(
   )
   merged = merge_current_findings(
       client,
-      source_table_id,
-      target_table_id,
+      table_id,
+      table_id,
       finding_rows,
       location=location,
   )
@@ -545,8 +510,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
   parser.add_argument("--project", default=_resolve_project())
   parser.add_argument("--dataset", default=telemetry.resolve_dataset())
-  parser.add_argument("--source-table", default=DEFAULT_SOURCE_TABLE)
-  parser.add_argument("--target-table", default=DEFAULT_TARGET_TABLE)
+  parser.add_argument("--table", default=DEFAULT_TABLE)
   parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
   parser.add_argument("--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"))
   parser.add_argument("--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"))
@@ -586,8 +550,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
         project=args.project,
         dataset=args.dataset,
-        source_table=args.source_table,
-        target_table=args.target_table,
+        table=args.table,
         cm_binary=args.cm_binary,
         cli_version=args.cli_version,
         location=args.location,
