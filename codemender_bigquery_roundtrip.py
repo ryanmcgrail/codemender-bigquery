@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import sys
+import subprocess
 import tempfile
 import uuid
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -24,6 +25,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from codemender_agent.codemender.importer import import_findings
 from codemender_agent.codemender.importer import read_findings
 from codemender_agent.codemender.importer import write_import_payload
+from codemender_agent.codemender.cli import is_ci_gate_exit
 from codemender_agent.telemetry import bigquery as telemetry
 from codemender_agent.utils import build_cm_command
 from codemender_agent.utils import run_command
@@ -58,6 +60,50 @@ def ensure_dataset(
   if location:
     dataset_resource.location = location
   client.create_dataset(dataset_resource, exists_ok=True)
+
+
+def ensure_vulnerability_findings_table(
+    client: Any,
+    project: str,
+    dataset: str,
+ ) -> None:
+  """Creates the telemetry-compatible source findings table when absent."""
+  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
+
+  schema = [
+      bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
+      bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
+      bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
+      bigquery.SchemaField("repository", "STRING"),
+      bigquery.SchemaField("title", "STRING"),
+      bigquery.SchemaField("vuln_type", "STRING"),
+      bigquery.SchemaField("cwe_id", "STRING"),
+      bigquery.SchemaField("severity", "STRING"),
+      bigquery.SchemaField("confidence_level", "STRING"),
+      bigquery.SchemaField("file_path", "STRING"),
+      bigquery.SchemaField("start_line", "INTEGER"),
+      bigquery.SchemaField("end_line", "INTEGER"),
+      bigquery.SchemaField("status", "STRING"),
+      bigquery.SchemaField("source_stage", "STRING"),
+      bigquery.SchemaField("verified", "BOOLEAN"),
+      bigquery.SchemaField("muted", "BOOLEAN"),
+      bigquery.SchemaField("mute_reason", "STRING"),
+      bigquery.SchemaField("fingerprint", "STRING"),
+      bigquery.SchemaField("fix_pr_url", "STRING"),
+      bigquery.SchemaField("patch_status", "STRING"),
+      bigquery.SchemaField("analysis", "STRING"),
+      bigquery.SchemaField("snippet", "STRING"),
+      bigquery.SchemaField("finding_source", "STRING"),
+  ]
+  table = bigquery.Table(
+      _table_id(project, dataset, DEFAULT_SOURCE_TABLE), schema=schema
+  )
+  table.time_partitioning = bigquery.TimePartitioning(
+      type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
+  )
+  table.clustering_fields = ["repository", "severity", "vuln_type"]
+  table.description = "One row per CodeMender vulnerability finding."
+  client.create_table(table, exists_ok=True)
 
 
 def _text(row: Mapping[str, Any], key: str) -> str:
@@ -178,6 +224,18 @@ def _finding_id(finding: Mapping[str, Any]) -> str:
   return str(value) if value else ""
 
 
+def _is_repo_finding(finding: Mapping[str, Any], repo_dir: str) -> bool:
+  file_path = _finding_value(finding, "file_path", "FilePath")
+  if not file_path:
+    return False
+  clean_repo = os.path.abspath(repo_dir).replace("\\", "/")
+  raw = str(file_path).strip().replace("\\", "/")
+  if os.path.isabs(raw):
+    clean_path = os.path.abspath(raw).replace("\\", "/")
+    return clean_path == clean_repo or clean_path.startswith(clean_repo + "/")
+  return not raw.startswith("/")
+
+
 def _match_cm_findings_to_source_rows(
     source_rows: Sequence[Mapping[str, Any]],
     cm_findings: Sequence[Mapping[str, Any]],
@@ -293,6 +351,19 @@ def _run_cm_action(
   return result.returncode
 
 
+def _run_cm_find(
+    cm_binary: str, repo_dir: str, cli_version: Optional[str]
+) -> None:
+  command = build_cm_command(
+      cm_binary, "find", target_or_id=repo_dir, cli_version=cli_version
+  )
+  result = run_command(command, cwd=repo_dir, check=False)
+  returncode = getattr(result, "returncode", 0)
+  stdout = getattr(result, "stdout", "")
+  if returncode and not is_ci_gate_exit(returncode, stdout or ""):
+    raise RuntimeError(f"cm find failed with exit code {returncode}")
+
+
 def merge_current_findings(
     client: Any,
     source_table_id: str,
@@ -384,36 +455,19 @@ def run_roundtrip(
     from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
     client = bigquery.Client(project=project)
-  ensure_dataset(client, project, dataset, location)
+  if not dry_run:
+    ensure_dataset(client, project, dataset, location)
+    if source_table == DEFAULT_SOURCE_TABLE:
+      ensure_vulnerability_findings_table(client, project, dataset)
   cm_binary = cm_binary or shutil.which("cm") or "cm"
 
   source_rows = fetch_latest_findings(
       client, source_table_id, repository, location=location
   )
-  before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
-  source_ids_by_cm_id = _match_cm_findings_to_source_rows(
-      source_rows, before_findings, repo_dir
-  )
-  already_present_source_ids = set(source_ids_by_cm_id.values())
-  import_rows = [
-      row for row in source_rows if _row_key(row)[1] not in already_present_source_ids
-  ]
-  import_records = [build_cm_import_record(row) for row in import_rows]
-
-  if dry_run:
-    return {
-        "source_findings": len(source_rows),
-        "already_in_code_mender": len(source_rows) - len(import_rows),
-        "to_import": len(import_records),
-        "imported": 0,
-        "verified": 0,
-        "fixed": 0,
-        "merged": 0,
-    }
-
-  if not source_rows:
+  if dry_run and not source_rows:
     return {
         "source_findings": 0,
+        "scanned_findings": 0,
         "already_in_code_mender": 0,
         "to_import": 0,
         "imported": 0,
@@ -422,9 +476,66 @@ def run_roundtrip(
         "merged": 0,
     }
 
+  scanned_findings = 0
+  if not source_rows:
+    before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+    before_ids = {_finding_id(finding) for finding in before_findings}
+    _run_cm_find(cm_binary, repo_dir, cli_version)
+    post_import_findings = read_findings(
+        cm_binary, repo_dir, cli_version=cli_version
+    )
+    new_findings = [
+        finding
+        for finding in post_import_findings
+        if _finding_id(finding) and _finding_id(finding) not in before_ids
+    ]
+    repo_findings = [
+        finding
+        for finding in post_import_findings
+        if _is_repo_finding(finding, repo_dir)
+    ]
+    candidate_findings = (
+        [f for f in new_findings if _is_repo_finding(f, repo_dir)]
+        if new_findings
+        else repo_findings
+    )
+    source_ids_by_cm_id = {
+        _finding_id(finding): _finding_id(finding)
+        for finding in candidate_findings
+        if _finding_id(finding)
+    }
+    import_rows: List[Mapping[str, Any]] = []
+    import_records: List[Dict[str, Any]] = []
+    scanned_findings = len(candidate_findings)
+  else:
+    before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+    source_ids_by_cm_id = _match_cm_findings_to_source_rows(
+        source_rows, before_findings, repo_dir
+    )
+    already_present_source_ids = set(source_ids_by_cm_id.values())
+    import_rows = [
+        row
+        for row in source_rows
+        if _row_key(row)[1] not in already_present_source_ids
+    ]
+    import_records = [build_cm_import_record(row) for row in import_rows]
+    post_import_findings = list(before_findings)
+
+  scan_only = not source_rows
+  if dry_run:
+    return {
+        "source_findings": len(source_rows),
+        "scanned_findings": scanned_findings,
+        "already_in_code_mender": len(source_rows) - len(import_rows),
+        "to_import": len(import_records),
+        "imported": 0,
+        "verified": 0,
+        "fixed": 0,
+        "merged": 0,
+    }
+
   imported_ids: List[str] = []
   imported_source_ids: Dict[str, str] = {}
-  post_import_findings = list(before_findings)
   if import_records:
     with tempfile.TemporaryDirectory(prefix="cm-bq-roundtrip-") as temp_dir:
       payload_path = write_import_payload(
@@ -442,24 +553,25 @@ def run_roundtrip(
 
   findings_by_id = {_finding_id(row): row for row in post_import_findings}
   verified_ids = set()
-  for finding_id in sorted(ids_to_process):
-    existing = findings_by_id.get(finding_id, {})
-    status = str(_finding_value(existing, "status", "Status") or "").upper()
-    if status in _CLOSED_STATUSES:
-      continue
-    if _verified(existing):
-      verified_ids.add(finding_id)
-      continue
-    if _run_cm_action("verify", finding_id, cm_binary, repo_dir, cli_version) != 0:
-      continue
-    current = read_findings(cm_binary, repo_dir, cli_version=cli_version)
-    verified_finding = next(
-        (row for row in current if _finding_id(row) == finding_id), None
-    )
-    if verified_finding is not None:
-      findings_by_id[finding_id] = verified_finding
-    if verified_finding is not None and _verified(verified_finding):
-      verified_ids.add(finding_id)
+  if not scan_only:
+    for finding_id in sorted(ids_to_process):
+      existing = findings_by_id.get(finding_id, {})
+      status = str(_finding_value(existing, "status", "Status") or "").upper()
+      if status in _CLOSED_STATUSES:
+        continue
+      if _verified(existing):
+        verified_ids.add(finding_id)
+        continue
+      if _run_cm_action("verify", finding_id, cm_binary, repo_dir, cli_version) != 0:
+        continue
+      current = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+      verified_finding = next(
+          (row for row in current if _finding_id(row) == finding_id), None
+      )
+      if verified_finding is not None:
+        findings_by_id[finding_id] = verified_finding
+      if verified_finding is not None and _verified(verified_finding):
+        verified_ids.add(finding_id)
 
   fix_attempted_ids = set()
   for finding_id in sorted(verified_ids):
@@ -469,7 +581,11 @@ def run_roundtrip(
     fix_attempted_ids.add(finding_id)
     _run_cm_action("fix", finding_id, cm_binary, repo_dir, cli_version)
 
-  after_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+  after_findings = (
+      list(post_import_findings)
+      if scan_only
+      else read_findings(cm_binary, repo_dir, cli_version=cli_version)
+  )
   final_findings_by_id = {_finding_id(row): row for row in after_findings}
   fixed_count = sum(
       1
@@ -505,6 +621,7 @@ def run_roundtrip(
   )
   return {
       "source_findings": len(source_rows),
+      "scanned_findings": scanned_findings,
       "already_in_code_mender": len(source_rows) - len(import_rows),
       "to_import": len(import_records),
       "imported": len(imported_ids),
@@ -518,7 +635,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
   parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
-  parser.add_argument("--project", default=telemetry.resolve_project())
+  parser.add_argument("--project", default=_resolve_project())
   parser.add_argument("--dataset", default=telemetry.resolve_dataset())
   parser.add_argument("--source-table", default=DEFAULT_SOURCE_TABLE)
   parser.add_argument("--target-table", default=DEFAULT_TARGET_TABLE)
@@ -534,13 +651,31 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   return args
 
 
+def _resolve_project() -> Optional[str]:
+  project = telemetry.resolve_project()
+  if project:
+    return project
+  try:
+    result = subprocess.run(
+        ["gcloud", "config", "get-value", "project"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+  except (OSError, subprocess.SubprocessError):
+    return None
+  project = (result.stdout or "").strip()
+  return project if result.returncode == 0 and project and project != "(unset)" else None
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
   logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
   args = _parse_args(argv)
   try:
     summary = run_roundtrip(
         repository=args.repository,
-        repo_dir=os.path.abspath(args.repo_dir),
+        repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
         project=args.project,
         dataset=args.dataset,
         source_table=args.source_table,

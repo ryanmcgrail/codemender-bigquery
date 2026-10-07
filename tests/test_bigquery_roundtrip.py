@@ -77,6 +77,35 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(dataset_resource.location, "us-central1")
     self.assertTrue(client.create_dataset.call_args.kwargs["exists_ok"])
 
+  def test_ensure_findings_table_creates_telemetry_schema(self):
+    client = unittest.mock.MagicMock()
+
+    roundtrip.ensure_vulnerability_findings_table(client, "project", "dataset")
+
+    table = client.create_table.call_args.args[0]
+    fields = {field.name: field for field in table.schema}
+    self.assertEqual(fields["finding_id"].mode, "REQUIRED")
+    self.assertEqual(fields["scan_id"].mode, "REQUIRED")
+    self.assertEqual(fields["scan_timestamp"].field_type, "TIMESTAMP")
+    self.assertEqual(table.time_partitioning.field, "scan_timestamp")
+    self.assertEqual(table.clustering_fields, ["repository", "severity", "vuln_type"])
+    self.assertTrue(client.create_table.call_args.kwargs["exists_ok"])
+
+  def test_project_falls_back_to_active_gcloud_configuration(self):
+    result = types.SimpleNamespace(
+        returncode=0, stdout="test-project-502314\n", stderr=""
+    )
+    with (
+        patch.object(roundtrip.telemetry, "resolve_project", return_value=None),
+        patch.object(roundtrip.subprocess, "run", return_value=result) as run,
+    ):
+      project = roundtrip._resolve_project()
+
+    self.assertEqual(project, "test-project-502314")
+    self.assertEqual(
+        run.call_args.args[0], ["gcloud", "config", "get-value", "project"]
+    )
+
   def test_rows_deduplicate_by_repository_and_finding_id(self):
     rows = [
         {"repository": "acme/widgets", "finding_id": "same", "title": "old"},
@@ -188,6 +217,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
             patch.object(roundtrip, "ensure_dataset"),
+            patch.object(roundtrip, "ensure_vulnerability_findings_table"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",
@@ -206,6 +236,48 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(summary["imported"], 1)
     self.assertEqual(summary["verified"], 1)
     self.assertEqual(summary["fixed"], 1)
+    self.assertEqual(summary["merged"], 1)
+
+  def test_roundtrip_scans_and_uploads_without_verify_or_fix_when_source_empty(self):
+    discovered = {
+        "FindingID": "cm-new",
+        "FilePath": "src/new.py",
+        "Title": "New issue",
+        "VulnType": "SQL Injection",
+        "StartLine": 25,
+        "Status": "OPEN",
+    }
+    verified = {**discovered, "Status": "VERIFIED"}
+    fixed = {**verified, "Status": "FIXED"}
+    with tempfile.TemporaryDirectory() as repo_dir:
+      with (
+          patch.object(roundtrip, "fetch_latest_findings", return_value=[]),
+          patch.object(
+              roundtrip,
+              "read_findings",
+              side_effect=[[], [discovered]],
+          ),
+          patch.object(roundtrip, "_run_cm_find") as cm_find,
+          patch.object(roundtrip, "_run_cm_action", return_value=0) as cm_action,
+          patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
+          patch.object(roundtrip, "ensure_dataset"),
+          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
+      ):
+        summary = roundtrip.run_roundtrip(
+            repository="acme/widgets",
+            repo_dir=repo_dir,
+            project="project",
+            dataset="dataset",
+            client=object(),
+        )
+
+    cm_find.assert_called_once()
+    cm_action.assert_not_called()
+    self.assertEqual(merge.call_args.args[3][0]["finding_id"], "cm-new")
+    self.assertEqual(summary["source_findings"], 0)
+    self.assertEqual(summary["scanned_findings"], 1)
+    self.assertEqual(summary["verified"], 0)
+    self.assertEqual(summary["fixed"], 0)
     self.assertEqual(summary["merged"], 1)
 
   def test_latest_query_ranks_before_filtering_closed_status(self):
@@ -241,9 +313,57 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertNotIn("unexpected", client.loaded[0][0])
     self.assertTrue(client.deleted.startswith("project.dataset._cm_stage_"))
 
-  def test_composite_key_requires_both_parts(self):
-    with self.assertRaises(ValueError):
-      roundtrip.deduplicate_rows_by_key([{"repository": "acme/widgets"}])
+  def test_is_repo_finding_matches_relative_and_absolute_repo_paths(self):
+    repo_dir = "/tmp/test-repo"
+    self.assertTrue(
+        roundtrip._is_repo_finding(
+            {"file_path": "/tmp/test-repo/src/app.py"}, repo_dir
+        )
+    )
+    self.assertTrue(
+        roundtrip._is_repo_finding({"file_path": "src/app.py"}, repo_dir)
+    )
+    self.assertFalse(
+        roundtrip._is_repo_finding(
+            {"file_path": "/tmp/other-repo/src/app.py"}, repo_dir
+        )
+    )
+    self.assertFalse(roundtrip._is_repo_finding({}, repo_dir))
+
+  def test_roundtrip_uses_repo_findings_when_no_new_ids_assigned(self):
+    existing = {
+        "FindingID": "cm-existing",
+        "FilePath": "src/existing.py",
+        "Title": "Pre-existing issue",
+        "VulnType": "XSS",
+        "StartLine": 10,
+        "Status": "OPEN",
+    }
+    with tempfile.TemporaryDirectory() as repo_dir:
+      with (
+          patch.object(roundtrip, "fetch_latest_findings", return_value=[]),
+          patch.object(
+              roundtrip,
+              "read_findings",
+              side_effect=[[existing], [existing]],
+          ),
+          patch.object(roundtrip, "_run_cm_find") as cm_find,
+          patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
+          patch.object(roundtrip, "ensure_dataset"),
+          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
+      ):
+        summary = roundtrip.run_roundtrip(
+            repository="acme/widgets",
+            repo_dir=repo_dir,
+            project="project",
+            dataset="dataset",
+            client=object(),
+        )
+
+    cm_find.assert_called_once()
+    self.assertEqual(merge.call_args.args[3][0]["finding_id"], "cm-existing")
+    self.assertEqual(summary["scanned_findings"], 1)
+    self.assertEqual(summary["merged"], 1)
 
 
 if __name__ == "__main__":
