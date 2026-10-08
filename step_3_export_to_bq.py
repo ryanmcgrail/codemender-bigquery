@@ -9,17 +9,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import uuid
 
 from step_1_import_from_bq import (
-    DEFAULT_TABLE,
     _finding_id,
     _finding_value,
     _int_or_none,
-    _resolve_project,
-    _table_id,
     compute_finding_fingerprint,
     deduplicate_rows_by_key,
-    ensure_dataset,
     normalize_repo_relative_path,
-    resolve_dataset,
 )
 from finding import Finding
 
@@ -426,82 +421,3 @@ def export_findings_to_bigquery(
       finding_rows,
       location=location,
   )
-
-
-def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-  parser = argparse.ArgumentParser(
-      description="Export CodeMender security findings to Google BigQuery."
-  )
-  parser.add_argument(
-      "--findings-file", required=True, help="Path to JSON file containing CodeMender findings"
-  )
-  parser.add_argument(
-      "--repository", required=True, help="BigQuery repository value, e.g. owner/name"
-  )
-  parser.add_argument(
-      "--repo-dir", default=os.getcwd(), help="Local repository checkout root"
-  )
-  parser.add_argument(
-      "--project", default=_resolve_project(), help="GCP project ID"
-  )
-  parser.add_argument(
-      "--dataset", default=resolve_dataset(), help="BigQuery dataset name"
-  )
-  parser.add_argument(
-      "--table", default=DEFAULT_TABLE, help="BigQuery destination table name"
-  )
-  parser.add_argument(
-      "--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"), help="BigQuery dataset location"
-  )
-  parser.add_argument(
-      "--with-snippets", action="store_true", help="Include code snippets and analysis prose"
-  )
-  args = parser.parse_args(argv)
-  if not args.project:
-    parser.error("--project or CODEMENDER_BQ_PROJECT/GOOGLE_CLOUD_PROJECT is required")
-  if not args.dataset:
-    parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
-  return args
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-  args = _parse_args(argv)
-  with open(args.findings_file, "r", encoding="utf-8") as f:
-    raw_findings = json.load(f)
-
-  if isinstance(raw_findings, dict) and "findings" in raw_findings:
-    findings = raw_findings["findings"]
-  elif isinstance(raw_findings, list):
-    findings = raw_findings
-  else:
-    logger.error("Expected findings JSON to be a list or an object with 'findings' array")
-    return 1
-
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-  client = bigquery.Client(project=args.project)
-  table_id = _table_id(args.project, args.dataset, args.table)
-  ensure_dataset(client, args.project, args.dataset, location=args.location)
-
-  repo_dir = os.path.abspath(os.path.expanduser(args.repo_dir))
-  finding_objs = [
-      Finding.from_dict(item, repo_dir=repo_dir) if isinstance(item, dict) else item
-      for item in findings
-  ]
-  merged = export_findings_to_bigquery(
-      client=client,
-      table_id=table_id,
-      findings=finding_objs,
-      repository=args.repository,
-      repo_dir=repo_dir,
-      location=args.location,
-      with_snippets=args.with_snippets,
-  )
-  print(f"Successfully merged {merged} findings into {table_id}")
-  return 0
-
-
-if __name__ == "__main__":
-  import sys
-  sys.exit(main())
-

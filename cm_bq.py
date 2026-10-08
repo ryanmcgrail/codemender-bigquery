@@ -15,7 +15,6 @@ import logging
 import os
 from pprint import pprint
 import shutil
-import subprocess
 import sys
 import tempfile
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -25,12 +24,10 @@ from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _finding_id,
     _is_repo_finding,
-    _latest_findings_query,
     _resolve_project,
     _row_key,
     _table_id,
     build_cm_import_record,
-    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_latest_findings,
     resolve_dataset,
@@ -45,7 +42,6 @@ from step_2_cm_find import (
 )
 from step_3_export_to_bq import (
     ScanRunContext,
-    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,

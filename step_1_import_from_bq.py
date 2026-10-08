@@ -1,14 +1,9 @@
-import argparse
-import datetime
 import hashlib
-import json
 import logging
 import os
-from pprint import pprint
 import re
 import subprocess
-import sys
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from finding import Finding
 
@@ -267,95 +262,3 @@ def fetch_latest_findings(
   except Exception as error:  # pylint: disable=broad-exception-caught
     logger.warning("Query failed on table %s: %s", table_id, error)
     return []
-
-
-def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument(
-      "--repository",
-      required=True,
-      help="BigQuery repository filter value, e.g. owner/name",
-  )
-  parser.add_argument(
-      "--project",
-      default=_resolve_project(),
-      help="GCP project ID (defaults to CODEMENDER_BQ_PROJECT or active gcloud config)",
-  )
-  parser.add_argument(
-      "--dataset",
-      default=resolve_dataset(),
-      help="BigQuery dataset name (defaults to CODEMENDER_BQ_DATASET)",
-  )
-  parser.add_argument(
-      "--table",
-      default=DEFAULT_TABLE,
-      help=f"BigQuery table name (default: {DEFAULT_TABLE})",
-  )
-  parser.add_argument(
-      "--location",
-      default=os.environ.get(ENV_LOCATION),
-      help="BigQuery dataset geographic location (optional)",
-  )
-  parser.add_argument(
-      "--output",
-      help="Optional file path to write findings JSON output",
-  )
-  parser.add_argument(
-      "--format",
-      choices=["json", "pretty", "table"],
-      default="pretty",
-      help="Output display format (default: pretty)",
-  )
-  args = parser.parse_args(argv)
-  if not args.project:
-    parser.error("--project or CODEMENDER_BQ_PROJECT/GOOGLE_CLOUD_PROJECT is required")
-  if not args.dataset:
-    parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
-  return args
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-  args = _parse_args(argv)
-
-  table_id = _table_id(args.project, args.dataset, args.table)
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  client = bigquery.Client(project=args.project)
-  ensure_dataset(client, args.project, args.dataset, args.location)
-
-  findings = fetch_latest_findings(
-      client=client,
-      table_id=table_id,
-      repository=args.repository,
-      location=args.location,
-  )
-
-  # Format output
-  finding_dicts = [f.to_dict() if isinstance(f, Finding) else f for f in findings]
-  if args.output:
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
-      json.dump(finding_dicts, f, default=str, indent=2)
-    print(f"Wrote {len(findings)} finding(s) to {args.output}")
-  elif args.format == "json":
-    print(json.dumps(finding_dicts, default=str, indent=2))
-  elif args.format == "pretty":
-    print(f"Fetched {len(findings)} actionable finding(s) from {table_id} for {args.repository}:")
-    pprint(findings, indent=2)
-  elif args.format == "table":
-    print(f"{'FINDING ID':<38} {'SEVERITY':<10} {'TYPE':<25} {'FILE PATH'}")
-    print("-" * 100)
-    for row in findings:
-      fid = _text(row, "finding_id")
-      sev = _text(row, "severity") or "UNKNOWN"
-      vtype = _text(row, "vuln_type") or _text(row, "cwe_id") or "UNKNOWN"
-      fpath = _text(row, "file_path")
-      print(f"{fid:<38} {sev:<10} {vtype:<25} {fpath}")
-
-  return 0
-
-
-if __name__ == "__main__":
-  sys.exit(main())
-

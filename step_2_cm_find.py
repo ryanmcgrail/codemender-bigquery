@@ -10,14 +10,6 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from step_1_import_from_bq import (
-    _finding_id,
-    _finding_value,
-    _int_or_none,
-    _row_key,
-    _text,
-    normalize_repo_relative_path,
-)
 from finding import Finding
 
 logger = logging.getLogger("run-codemender-find")
@@ -610,47 +602,3 @@ def run_cm_action(
 
 
 _run_cm_action = run_cm_action
-
-
-def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-  parser = argparse.ArgumentParser(
-      description="Run CodeMender find on a local repository."
-  )
-  parser.add_argument(
-      "--repo-dir", default=os.getcwd(), help="Local repository checkout root"
-  )
-  parser.add_argument(
-      "--cm-binary", default=shutil.which("cm") or "cm", help="Path to CodeMender CLI binary"
-  )
-  parser.add_argument(
-      "--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"),
-      help="CodeMender CLI version"
-  )
-  parser.add_argument(
-      "--output", default=None, help="Optional output JSON file path for findings"
-  )
-  return parser.parse_args(argv)
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-  args = _parse_args(argv)
-  repo_dir = os.path.abspath(os.path.expanduser(args.repo_dir))
-  try:
-    run_cm_find(args.cm_binary, repo_dir, cli_version=args.cli_version)
-    findings = read_findings(args.cm_binary, repo_dir, cli_version=args.cli_version)
-    if args.output:
-      with open(args.output, "w", encoding="utf-8") as f:
-        json.dump([f.to_cm_dict() if isinstance(f, Finding) else f for f in findings], f, indent=2, default=str)
-      print(f"CodeMender find completed: {len(findings)} findings written to {args.output}")
-    else:
-      print(f"CodeMender find completed successfully: {len(findings)} findings discovered.")
-    return 0
-  except Exception as error:  # pylint: disable=broad-exception-caught
-    logger.error("CodeMender find failed: %s", error)
-    return 1
-
-
-if __name__ == "__main__":
-  sys.exit(main())
-
