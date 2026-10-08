@@ -1,4 +1,0 @@
-project_id: yaml-project
-scheduler_paused: maybe
-runner_cpu: [1, 2]
-vpc_connector_max_instances: many

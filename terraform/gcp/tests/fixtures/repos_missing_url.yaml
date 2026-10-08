@@ -1,4 +1,0 @@
-repositories:
-  svc-a:
-    schedule: "0 2 * * *"
-  svc-b:
