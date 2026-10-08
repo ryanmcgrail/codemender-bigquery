@@ -15,6 +15,7 @@ import logging
 import os
 from pprint import pprint
 import shutil
+import subprocess
 import sys
 import tempfile
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -23,11 +24,12 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _finding_id,
-    _is_repo_finding,
+    _latest_findings_query,
     _resolve_project,
     _row_key,
     _table_id,
     build_cm_import_record,
+    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_latest_findings,
     resolve_dataset,
@@ -42,6 +44,7 @@ from step_2_cm_find import (
 )
 from step_3_export_to_bq import (
     ScanRunContext,
+    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,
@@ -116,16 +119,7 @@ def run_roundtrip(
         for finding in post_import_findings
         if _finding_id(finding) and _finding_id(finding) not in before_ids
     ]
-    repo_findings = [
-        finding
-        for finding in post_import_findings
-        if _is_repo_finding(finding, repo_dir)
-    ]
-    candidate_findings = (
-        [f for f in new_findings if _is_repo_finding(f, repo_dir)]
-        if new_findings
-        else repo_findings
-    )
+    candidate_findings = new_findings if new_findings else post_import_findings
     source_ids_by_cm_id = {
         _finding_id(finding): _finding_id(finding)
         for finding in candidate_findings
@@ -135,6 +129,7 @@ def run_roundtrip(
     import_records: List[Dict[str, Any]] = []
     scanned_findings = len(candidate_findings)
   else:
+    _run_cm_find(cm_binary, repo_dir, cli_version)
     before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
     source_ids_by_cm_id = _match_cm_findings_to_source_rows(
         source_rows, before_findings, repo_dir
@@ -147,6 +142,7 @@ def run_roundtrip(
     ]
     import_records = [build_cm_import_record(row) for row in import_rows]
     post_import_findings = list(before_findings)
+    scanned_findings = len(before_findings)
 
   imported_ids: List[str] = []
   imported_source_ids: Dict[str, str] = {}

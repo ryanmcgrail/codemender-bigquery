@@ -68,12 +68,6 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
         "src/a.ts",
     )
 
-  def test_compute_finding_fingerprint(self):
-    fp1 = fetcher.compute_finding_fingerprint("src/a.ts", "CWE-89", 10)
-    fp2 = fetcher.compute_finding_fingerprint("src/a.ts", "cwe-89", 10)
-    self.assertEqual(fp1, fp2)
-    self.assertEqual(len(fp1), 8)
-
   def test_fetch_latest_findings_success(self):
     client = MagicMock()
     mock_job = MagicMock()

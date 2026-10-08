@@ -8,7 +8,6 @@ between CodeMender CLI formats and BigQuery telemetry formats.
 from __future__ import annotations
 
 import datetime
-import hashlib
 import os
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -150,16 +149,6 @@ def normalize_repo_relative_path(path: str, repo_dir: Optional[str] = None) -> s
   return p
 
 
-def compute_finding_fingerprint(
-    file_path: str, vuln_type: str, start_line: int
-) -> str:
-  """Computes a deterministic 8-character SHA256 fingerprint for a finding."""
-  norm_path = normalize_repo_relative_path(file_path)
-  norm_type = (vuln_type or "vulnerability").strip().lower()
-  raw_hash_str = f"{norm_path}|{norm_type}|{start_line}"
-  return hashlib.sha256(raw_hash_str.encode("utf-8")).hexdigest()[:8]
-
-
 # --- Main Finding Class ---
 
 
@@ -287,16 +276,7 @@ class Finding:
 
   @property
   def fingerprint(self) -> Optional[str]:
-    val = _as_str(self._get("fingerprint", "Fingerprint"))
-    if val:
-      return val
-    if self.file_path and self.start_line is not None:
-      fp = compute_finding_fingerprint(
-          self.file_path, self.vuln_type or "vulnerability", self.start_line
-      )
-      self._raw["fingerprint"] = fp
-      return fp
-    return None
+    return _as_str(self._get("fingerprint", "Fingerprint"))
 
   @property
   def fix_pr_url(self) -> Optional[str]:
@@ -383,29 +363,6 @@ class Finding:
     return cls.from_dict(item, repo_dir=repo_dir)
 
   # --- Domain Methods ---
-
-  def compute_fingerprint(self, repo_dir: Optional[str] = None) -> str:
-    """Computes or retrieves deterministic SHA256 fingerprint."""
-    val = _as_str(self._get("fingerprint", "Fingerprint"))
-    if val:
-      return val
-    norm_path = normalize_repo_relative_path(self.file_path, repo_dir)
-    fp = compute_finding_fingerprint(
-        norm_path, self.vuln_type or "vulnerability", self.start_line or 0
-    )
-    self._raw["fingerprint"] = fp
-    return fp
-
-  def is_repo_finding(self, repo_dir: str) -> bool:
-    """Whether finding belongs to the target repo directory."""
-    if not self.file_path:
-      return False
-    clean_repo = os.path.abspath(repo_dir).replace("\\", "/")
-    raw = str(self.file_path).strip().replace("\\", "/")
-    if os.path.isabs(raw):
-      clean_path = os.path.abspath(raw).replace("\\", "/")
-      return clean_path == clean_repo or clean_path.startswith(clean_repo + "/")
-    return not raw.startswith("/")
 
   def is_closed(self) -> bool:
     """Whether finding status is closed/remediated."""
@@ -541,7 +498,6 @@ class Finding:
       d["finding_id"] = source_finding_id
     if repo_dir:
       d["file_path"] = normalize_repo_relative_path(self.file_path, repo_dir)
-      d["fingerprint"] = self.compute_fingerprint(repo_dir)
     return d
 
   def __repr__(self) -> str:

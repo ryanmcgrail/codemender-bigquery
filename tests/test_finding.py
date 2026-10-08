@@ -4,7 +4,6 @@ import unittest
 
 from finding import (
     Finding,
-    compute_finding_fingerprint,
     extract_cwe_id,
     normalize_repo_relative_path,
 )
@@ -34,12 +33,6 @@ class FindingTests(unittest.TestCase):
         "index.js",
     )
 
-  def test_compute_finding_fingerprint(self):
-    fp1 = compute_finding_fingerprint("src/db.py", "SQL_INJECTION", 42)
-    fp2 = compute_finding_fingerprint("src/db.py", "sql_injection", 42)
-    self.assertEqual(len(fp1), 8)
-    self.assertEqual(fp1, fp2)
-
   def test_from_dict_and_to_dict(self):
     data = {
         "finding_id": "f-123",
@@ -53,6 +46,7 @@ class FindingTests(unittest.TestCase):
         "status": "detected",
         "analysis": "Secret key found in source",
         "snippet": "SECRET = '123'",
+        "fingerprint": "fp-123",
     }
     f = Finding.from_dict(data)
     self.assertEqual(f.finding_id, "f-123")
@@ -66,12 +60,13 @@ class FindingTests(unittest.TestCase):
     self.assertEqual(f.status, "DETECTED")
     self.assertEqual(f.analysis, "Secret key found in source")
     self.assertEqual(f.snippet, "SECRET = '123'")
-    self.assertIsNotNone(f.fingerprint)
+    self.assertEqual(f.fingerprint, "fp-123")
 
     out = f.to_dict()
     self.assertEqual(out["finding_id"], "f-123")
     self.assertEqual(out["severity"], "HIGH")
     self.assertEqual(out["cwe_id"], "CWE-798")
+    self.assertEqual(out["fingerprint"], "fp-123")
 
   def test_from_cm_json_and_to_cm_dict(self):
     cm_json = {

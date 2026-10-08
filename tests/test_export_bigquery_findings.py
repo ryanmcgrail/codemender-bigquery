@@ -69,13 +69,14 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
         "vuln_type": "SQL Injection",
         "start_line": 10,
         "status": "OPEN",
+        "fingerprint": "fp-123",
     }
     telemetry_finding = exporter._to_telemetry_finding(
         cm_finding, "/work/repo", source_finding_id="orig-id"
     )
     self.assertEqual(telemetry_finding["finding_id"], "orig-id")
     self.assertEqual(telemetry_finding["file_path"], "/work/repo/src/main.py")
-    self.assertIsNotNone(telemetry_finding.get("fingerprint"))
+    self.assertEqual(telemetry_finding.get("fingerprint"), "fp-123")
 
   def test_build_finding_rows(self):
     ctx = exporter.ScanRunContext(
@@ -93,6 +94,7 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
             "start_line": 15,
             "end_line": 20,
             "status": "VERIFIED",
+            "fingerprint": "fp-1",
         }
     ]
     rows = exporter.build_finding_rows(ctx, findings, scan_timestamp="2026-10-07T00:00:00Z")
@@ -105,6 +107,7 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     self.assertEqual(row["severity"], "HIGH")
     self.assertEqual(row["start_line"], 15)
     self.assertEqual(row["status"], "VERIFIED")
+    self.assertEqual(row["fingerprint"], "fp-1")
     self.assertTrue(row["verified"])
     self.assertEqual(row["finding_source"], "codemender")
 

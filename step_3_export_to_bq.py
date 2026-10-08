@@ -12,7 +12,6 @@ from step_1_import_from_bq import (
     _finding_id,
     _finding_value,
     _int_or_none,
-    compute_finding_fingerprint,
     deduplicate_rows_by_key,
     normalize_repo_relative_path,
 )
@@ -208,21 +207,11 @@ def build_finding_rows(
 
 
 def _fingerprint_for_cm_finding(
-    finding: Mapping[str, Any], repo_dir: str,
+    finding: Any, repo_dir: Optional[str] = None,
 ) -> Optional[str]:
   """Derives a stable VCS fingerprint for a CodeMender finding."""
   fingerprint = _finding_value(finding, "fingerprint", "Fingerprint")
-  if fingerprint:
-    return str(fingerprint)
-  file_path = _finding_value(finding, "file_path", "FilePath")
-  vuln_type = _finding_value(finding, "vuln_type", "VulnType")
-  start_line = _finding_value(finding, "start_line", "StartLine")
-  if not file_path:
-    return None
-  path = normalize_repo_relative_path(str(file_path), repo_dir)
-  return compute_finding_fingerprint(
-      path, str(vuln_type or "vulnerability"), _int_or_none(start_line) or 0
-  )
+  return str(fingerprint) if fingerprint else None
 
 
 def _to_telemetry_finding(

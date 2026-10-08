@@ -195,6 +195,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
               "read_findings",
               side_effect=[[], [imported]],
           ),
+          patch.object(roundtrip, "_run_cm_find") as cm_find,
           patch.object(
               roundtrip,
               "import_findings",
@@ -211,6 +212,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
             client=object(),
         )
 
+    cm_find.assert_called_once()
     self.assertEqual(
       merge.call_args.args[3][0]["finding_id"], "source-finding-id"
     )
@@ -284,23 +286,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
     )
     self.assertNotIn("unexpected", client.loaded[0][0])
     self.assertTrue(client.deleted.startswith("project.dataset._cm_stage_"))
-
-  def test_is_repo_finding_matches_relative_and_absolute_repo_paths(self):
-    repo_dir = "/tmp/test-repo"
-    self.assertTrue(
-        roundtrip._is_repo_finding(
-            {"file_path": "/tmp/test-repo/src/app.py"}, repo_dir
-        )
-    )
-    self.assertTrue(
-        roundtrip._is_repo_finding({"file_path": "src/app.py"}, repo_dir)
-    )
-    self.assertFalse(
-        roundtrip._is_repo_finding(
-            {"file_path": "/tmp/other-repo/src/app.py"}, repo_dir
-        )
-    )
-    self.assertFalse(roundtrip._is_repo_finding({}, repo_dir))
 
   def test_roundtrip_uses_repo_findings_when_no_new_ids_assigned(self):
     existing = {

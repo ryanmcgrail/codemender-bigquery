@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import os
 import re
@@ -139,20 +138,6 @@ def _finding_id(finding: Any) -> str:
   return str(value) if value else ""
 
 
-def _is_repo_finding(finding: Any, repo_dir: str) -> bool:
-  if isinstance(finding, Finding):
-    return finding.is_repo_finding(repo_dir)
-  file_path = _finding_value(finding, "file_path", "FilePath")
-  if not file_path:
-    return False
-  clean_repo = os.path.abspath(repo_dir).replace("\\", "/")
-  raw = str(file_path).strip().replace("\\", "/")
-  if os.path.isabs(raw):
-    clean_path = os.path.abspath(raw).replace("\\", "/")
-    return clean_path == clean_repo or clean_path.startswith(clean_repo + "/")
-  return not raw.startswith("/")
-
-
 def normalize_repo_relative_path(path: str, repo_dir: Optional[str] = None) -> str:
   """Normalizes a file path to be strictly repository-relative with forward slashes."""
   if not path:
@@ -179,16 +164,6 @@ def normalize_repo_relative_path(path: str, repo_dir: Optional[str] = None) -> s
   p = re.sub(r"^(\.\./)+", "", p)
   p = re.sub(r"^\.?/+", "", p)
   return p
-
-
-def compute_finding_fingerprint(
-    file_path: str, vuln_type: str, start_line: int
-) -> str:
-  """Computes a deterministic 8-character SHA256 fingerprint for a finding."""
-  norm_path = normalize_repo_relative_path(file_path)
-  norm_type = (vuln_type or "vulnerability").strip().lower()
-  raw_hash_str = f"{norm_path}|{norm_type}|{start_line}"
-  return hashlib.sha256(raw_hash_str.encode("utf-8")).hexdigest()[:8]
 
 
 def build_cm_import_record(row: Any) -> Dict[str, Any]:
