@@ -10,6 +10,8 @@ import subprocess
 import sys
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from finding import Finding
+
 logger = logging.getLogger("fetch-bigquery-findings")
 
 # --- Environment & Configuration Keys ---
@@ -25,9 +27,6 @@ _PROJECT_FALLBACK_ENV_KEYS = (
 
 DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
-_CLOSED_STATUSES = frozenset(
-    {"FIXED", "REMEDIATED", "PATCHED", "DISMISSED", "FALSE_POSITIVE", "RESOLVED"}
-)
 
 
 def resolve_dataset() -> Optional[str]:
@@ -230,7 +229,7 @@ def fetch_latest_findings(
     table_id: str,
     repository: str,
     location: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[Finding]:
   """Loads one latest actionable source row per repository/finding_id from BigQuery."""
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
@@ -243,7 +242,10 @@ def fetch_latest_findings(
     rows = client.query(
         _latest_findings_query(table_id), job_config=config, location=location
     ).result()
-    return [dict(row.items()) for row in rows]
+    return [
+        Finding.from_bq_row(dict(row.items()) if hasattr(row, "items") else row)
+        for row in rows
+    ]
   except Exception as error:  # pylint: disable=broad-exception-caught
     logger.warning("Query failed on table %s: %s", table_id, error)
     return []
@@ -312,13 +314,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   )
 
   # Format output
+  finding_dicts = [f.to_dict() if isinstance(f, Finding) else f for f in findings]
   if args.output:
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
-      json.dump(findings, f, default=str, indent=2)
+      json.dump(finding_dicts, f, default=str, indent=2)
     print(f"Wrote {len(findings)} finding(s) to {args.output}")
   elif args.format == "json":
-    print(json.dumps(findings, default=str, indent=2))
+    print(json.dumps(finding_dicts, default=str, indent=2))
   elif args.format == "pretty":
     print(f"Fetched {len(findings)} actionable finding(s) from {table_id} for {args.repository}:")
     pprint(findings, indent=2)

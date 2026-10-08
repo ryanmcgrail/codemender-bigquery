@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from google.cloud import bigquery
 
-import export_bigquery_findings as exporter
+import step_3_export_to_bq as exporter
 
 
 class _Job:

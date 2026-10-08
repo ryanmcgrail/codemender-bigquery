@@ -14,65 +14,34 @@ import json
 import logging
 import os
 from pprint import pprint
-import re
 import shutil
 import sys
-import subprocess
 import tempfile
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
-import uuid
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _finding_id,
-    _finding_value,
-    _int_or_none,
     _is_repo_finding,
-    _latest_findings_query,
     _resolve_project,
     _row_key,
     _table_id,
-    _text,
     build_cm_import_record,
-    compute_finding_fingerprint,
-    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_latest_findings,
-    normalize_repo_relative_path,
     resolve_dataset,
     resolve_project,
 )
 from step_2_cm_find import (
-    FindingImportError,
-    IMPORTED_FINDING_FIELDS,
-    SECRET_PATTERNS,
-    _ids,
     _match_cm_findings_to_source_rows,
-    _run_cm_action,
     _run_cm_find,
-    build_cm_command,
-    extract_json_from_output,
-    filter_supported_flags,
-    get_supported_cm_flags,
     import_findings,
-    is_ci_gate_exit,
-    parse_findings_json,
-    parse_help_flags,
-    parse_token_metric,
     read_findings,
-    redact_sensitive_arg,
-    resolve_command_flags,
-    resolve_command_model,
-    run_cm_action,
-    run_cm_find,
-    run_command,
     write_import_payload,
 )
 from step_3_export_to_bq import (
     ScanRunContext,
-    _fingerprint_for_cm_finding,
-    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,

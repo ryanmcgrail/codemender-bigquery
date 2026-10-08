@@ -8,7 +8,7 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
-import run_codemender_find as finder
+import step_2_cm_find as finder
 
 
 class RunCodeMenderFindTests(unittest.TestCase):

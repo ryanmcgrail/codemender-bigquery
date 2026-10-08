@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from google.cloud import bigquery
 
-import codemender_bigquery_roundtrip as roundtrip
+import cm_bq as roundtrip
 
 
 class _Job:
