@@ -126,6 +126,27 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
   def test_export_findings_to_bigquery(self):
     client = _MockClient()
     findings = [
+        exporter.Finding(
+            finding_id="cm-1",
+            file_path="src/app.py",
+            title="XSS",
+            vuln_type="XSS",
+            start_line=5,
+            status="OPEN",
+        )
+    ]
+    merged = exporter.export_findings_to_bigquery(
+        client=client,
+        table_id="project.dataset.findings",
+        findings=findings,
+        repository="acme/widgets",
+        repo_dir="/tmp/repo",
+    )
+    self.assertEqual(merged, 1)
+
+  def test_export_findings_to_bigquery_with_dicts(self):
+    client = _MockClient()
+    findings = [
         {
             "finding_id": "cm-1",
             "file_path": "src/app.py",

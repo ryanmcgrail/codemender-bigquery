@@ -8,18 +8,17 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from step_1_import_from_bq import (
     _finding_id,
     _finding_value,
     _int_or_none,
-    _is_repo_finding,
     _row_key,
     _text,
     normalize_repo_relative_path,
 )
+from finding import Finding
 
 logger = logging.getLogger("run-codemender-find")
 
@@ -408,8 +407,10 @@ def extract_json_from_output(raw_str: Optional[str]) -> Optional[Any]:
     return None
 
 
-def parse_findings_json(json_str: str) -> List[Dict[str, Any]]:
-  """Parses `cm report --format json` output normalizing keys to PascalCase."""
+def _parse_findings_json(
+    json_str: str, repo_dir: Optional[str] = None
+) -> List[Finding]:
+  """Parses `cm report --format json` output into Finding instances."""
   data = extract_json_from_output(json_str)
   if data is None:
     logger.error("No valid JSON array or object found in report.")
@@ -422,11 +423,11 @@ def parse_findings_json(json_str: str) -> List[Dict[str, Any]]:
   else:
     findings = []
 
-  cleaned_findings = []
+  parsed_findings: List[Finding] = []
   for item in findings:
     if not isinstance(item, dict):
       continue
-    cleaned = {}
+    cleaned: Dict[str, Any] = {}
     for k, v in item.items():
       if v == "":
         cleaned[k] = None
@@ -435,9 +436,12 @@ def parse_findings_json(json_str: str) -> List[Dict[str, Any]]:
       canonical = _FINDING_KEY_ALIASES.get(k)
       if canonical and canonical not in item:
         cleaned[canonical] = cleaned[k]
-    cleaned_findings.append(cleaned)
+    parsed_findings.append(Finding.from_cm_json(cleaned, repo_dir=repo_dir))
 
-  return cleaned_findings
+  return parsed_findings
+
+
+parse_findings_json = _parse_findings_json
 
 
 class FindingImportError(RuntimeError):
@@ -461,7 +465,7 @@ def read_findings(
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
     cli_version: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[Finding]:
   """Returns every finding currently in the CodeMender state."""
   report_cmd = build_cm_command(
       cm_binary,
@@ -486,7 +490,7 @@ def read_findings(
     raise FindingImportError(
         "'cm report --format json' exited 0 but wrote no parseable JSON"
     )
-  return parse_findings_json(res.stdout)
+  return _parse_findings_json(res.stdout, repo_dir=repo_dir)
 
 
 def _ids(findings: List[Dict[str, Any]]) -> List[str]:
@@ -670,7 +674,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     findings = read_findings(args.cm_binary, repo_dir, cli_version=args.cli_version)
     if args.output:
       with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(findings, f, indent=2)
+        json.dump([f.to_cm_dict() if isinstance(f, Finding) else f for f in findings], f, indent=2, default=str)
       print(f"CodeMender find completed: {len(findings)} findings written to {args.output}")
     else:
       print(f"CodeMender find completed successfully: {len(findings)} findings discovered.")

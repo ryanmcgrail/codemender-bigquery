@@ -13,18 +13,15 @@ from step_1_import_from_bq import (
     _finding_id,
     _finding_value,
     _int_or_none,
-    _is_repo_finding,
     _resolve_project,
-    _row_key,
     _table_id,
-    _text,
     compute_finding_fingerprint,
     deduplicate_rows_by_key,
     ensure_dataset,
     normalize_repo_relative_path,
     resolve_dataset,
-    resolve_project,
 )
+from finding import Finding
 
 logger = logging.getLogger("export-bigquery-findings")
 
@@ -234,7 +231,7 @@ def _fingerprint_for_cm_finding(
 
 
 def _to_telemetry_finding(
-    finding: Mapping[str, Any],
+    finding: Union[Finding, Mapping[str, Any]],
     repo_dir: str,
     source_finding_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -386,7 +383,7 @@ WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
 def export_findings_to_bigquery(
     client: Any,
     table_id: str,
-    findings: Iterable[Mapping[str, Any]],
+    findings: Iterable[Finding],
     repository: str,
     repo_dir: str,
     location: Optional[str] = None,
@@ -400,12 +397,16 @@ def export_findings_to_bigquery(
   source_ids = source_ids_by_cm_id or {}
   allowed_ids = set(ids_to_process) if ids_to_process is not None else None
 
+  finding_objs = [
+      f if isinstance(f, Finding) else Finding.from_dict(f, repo_dir)
+      for f in findings
+  ]
   findings_for_upload = [
       _to_telemetry_finding(
-          finding, repo_dir, source_ids.get(_finding_id(finding))
+          finding, repo_dir, source_ids.get(finding.finding_id)
       )
-      for finding in findings
-      if allowed_ids is None or _finding_id(finding) in allowed_ids
+      for finding in finding_objs
+      if allowed_ids is None or finding.finding_id in allowed_ids
   ]
   context = ScanRunContext(
       stage="bigquery_roundtrip",
@@ -482,12 +483,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   table_id = _table_id(args.project, args.dataset, args.table)
   ensure_dataset(client, args.project, args.dataset, location=args.location)
 
+  repo_dir = os.path.abspath(os.path.expanduser(args.repo_dir))
+  finding_objs = [
+      Finding.from_dict(item, repo_dir=repo_dir) if isinstance(item, dict) else item
+      for item in findings
+  ]
   merged = export_findings_to_bigquery(
       client=client,
       table_id=table_id,
-      findings=findings,
+      findings=finding_objs,
       repository=args.repository,
-      repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
+      repo_dir=repo_dir,
       location=args.location,
       with_snippets=args.with_snippets,
   )

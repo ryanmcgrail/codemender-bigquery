@@ -10,7 +10,6 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import hashlib
-import json
 import os
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -18,7 +17,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 # --- Constants & Pattern Definitions ---
 
 _CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
-_REPEATED_SLASHES = re.compile(r"/{2,}")
 _TRUTHY = frozenset({"true", "1", "yes", "on"})
 
 _FIXED_STATUSES = frozenset({"FIXED", "REMEDIATED", "PATCHED"})
@@ -55,7 +53,11 @@ _FINDING_KEY_ALIASES = {
 # Reverse aliases: PascalCase -> snake_case
 _PASCAL_TO_SNAKE = {v: k for k, v in _FINDING_KEY_ALIASES.items()}
 _PASCAL_TO_SNAKE["Line"] = "start_line"
+_PASCAL_TO_SNAKE["line"] = "start_line"
 _PASCAL_TO_SNAKE["Message"] = "analysis"
+_PASCAL_TO_SNAKE["message"] = "analysis"
+_PASCAL_TO_SNAKE["confidence"] = "confidence_level"
+_PASCAL_TO_SNAKE["Confidence"] = "confidence_level"
 
 IMPORTED_FINDING_FIELDS = (
     "file_path",
@@ -526,7 +528,9 @@ class Finding:
 
   def __contains__(self, key: str) -> bool:
     norm_key = _PASCAL_TO_SNAKE.get(key, key)
-    return hasattr(self, norm_key) or key in self.raw_data
+    if hasattr(self, norm_key) and getattr(self, norm_key) is not None:
+      return True
+    return key in self.raw_data and self.raw_data[key] is not None
 
   def get(self, key: str, default: Any = None) -> Any:
     norm_key = _PASCAL_TO_SNAKE.get(key, key)
@@ -625,4 +629,3 @@ class Finding:
       finding = Finding.from_dict(item)
       keyed[finding.row_key] = finding
     return list(keyed.values())
-

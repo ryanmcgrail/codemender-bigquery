@@ -68,8 +68,12 @@ class RunCodeMenderFindTests(unittest.TestCase):
 
   def test_parse_findings_json(self):
     raw = json.dumps([{"finding_id": "f-1", "file_path": "a.py", "title": "SQLi"}])
-    parsed = finder.parse_findings_json(raw)
+    parsed = finder._parse_findings_json(raw)
     self.assertEqual(len(parsed), 1)
+    self.assertIsInstance(parsed[0], finder.Finding)
+    self.assertEqual(parsed[0].finding_id, "f-1")
+    self.assertEqual(parsed[0].file_path, "a.py")
+    self.assertEqual(parsed[0].title, "SQLi")
     self.assertEqual(parsed[0]["FindingID"], "f-1")
     self.assertEqual(parsed[0]["FilePath"], "a.py")
     self.assertEqual(parsed[0]["Title"], "SQLi")
