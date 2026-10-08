@@ -4,9 +4,6 @@ This script transforms CodeMender findings into telemetry-compatible records
 and merges them into a BigQuery destination table using composite primary keys
 (repository, finding_id).
 
-It is completely standalone with no internal dependencies on `codemender_agent`.
-Only `google-cloud-bigquery` is required.
-
 Example usage:
   python export_bigquery_findings.py \
     --findings-file /tmp/findings.json \

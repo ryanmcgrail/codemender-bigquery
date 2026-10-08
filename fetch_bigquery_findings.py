@@ -3,9 +3,6 @@
 This script pulls the latest actionable findings for a repository from a
 BigQuery dataset/table, filtering out closed/remediated findings.
 
-It is completely standalone with no internal dependencies on `codemender_agent`.
-Only `google-cloud-bigquery` is required.
-
 Example usage:
   python fetch_bigquery_findings.py \
     --repository ryanmcgrail/juice-shop \
