@@ -22,7 +22,28 @@ import tempfile
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import uuid
 
-from run_codemender_find import (
+
+from step_1_import_from_bq import (
+    DEFAULT_TABLE,
+    _finding_id,
+    _finding_value,
+    _int_or_none,
+    _is_repo_finding,
+    _latest_findings_query,
+    _resolve_project,
+    _row_key,
+    _table_id,
+    _text,
+    build_cm_import_record,
+    compute_finding_fingerprint,
+    deduplicate_rows_by_key,
+    ensure_dataset,
+    fetch_latest_findings,
+    normalize_repo_relative_path,
+    resolve_dataset,
+    resolve_project,
+)
+from step_2_cm_find import (
     FindingImportError,
     IMPORTED_FINDING_FIELDS,
     SECRET_PATTERNS,
@@ -48,9 +69,7 @@ from run_codemender_find import (
     run_command,
     write_import_payload,
 )
-
-
-from export_bigquery_findings import (
+from step_3_export_to_bq import (
     ScanRunContext,
     _fingerprint_for_cm_finding,
     _to_telemetry_finding,
@@ -58,26 +77,7 @@ from export_bigquery_findings import (
     export_findings_to_bigquery,
     merge_current_findings,
 )
-from fetch_bigquery_findings import (
-    DEFAULT_TABLE,
-    _finding_id,
-    _finding_value,
-    _int_or_none,
-    _is_repo_finding,
-    _latest_findings_query,
-    _resolve_project,
-    _row_key,
-    _table_id,
-    _text,
-    build_cm_import_record,
-    compute_finding_fingerprint,
-    deduplicate_rows_by_key,
-    ensure_dataset,
-    fetch_latest_findings,
-    normalize_repo_relative_path,
-    resolve_dataset,
-    resolve_project,
-)
+
 
 import types
 telemetry = types.SimpleNamespace(

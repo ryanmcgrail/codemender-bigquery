@@ -1,16 +1,3 @@
-"""Fetch actionable CodeMender security findings from Google BigQuery.
-
-This script pulls the latest actionable findings for a repository from a
-BigQuery dataset/table, filtering out closed/remediated findings.
-
-Example usage:
-  python fetch_bigquery_findings.py \
-    --repository ryanmcgrail/juice-shop \
-    --project test-project-502314 \
-    --dataset codemender_juice_shop \
-    --table findings
-"""
-
 import argparse
 import datetime
 import hashlib

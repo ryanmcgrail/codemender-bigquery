@@ -1,13 +1,3 @@
-"""Run CodeMender find and interact with CodeMender CLI.
-
-This module provides standalone functionality to run CodeMender's `find`
-command, read findings from the local CodeMender state, import findings,
-and match findings between external sources and CodeMender findings.
-
-Example usage:
-  python run_codemender_find.py --repo-dir ~/juice-shop
-"""
-
 import argparse
 import json
 import logging
@@ -21,7 +11,7 @@ import sys
 import tempfile
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from fetch_bigquery_findings import (
+from step_1_import_from_bq import (
     _finding_id,
     _finding_value,
     _int_or_none,

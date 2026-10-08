@@ -1,19 +1,3 @@
-"""Export CodeMender findings into Google BigQuery.
-
-This script transforms CodeMender findings into telemetry-compatible records
-and merges them into a BigQuery destination table using composite primary keys
-(repository, finding_id).
-
-Example usage:
-  python export_bigquery_findings.py \
-    --findings-file /tmp/findings.json \
-    --repository ryanmcgrail/juice-shop \
-    --repo-dir ~/juice-shop \
-    --project test-project-502314 \
-    --dataset codemender_juice_shop \
-    --table findings
-"""
-
 import argparse
 import dataclasses
 import datetime
@@ -24,7 +8,7 @@ import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 import uuid
 
-from fetch_bigquery_findings import (
+from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _finding_id,
     _finding_value,
