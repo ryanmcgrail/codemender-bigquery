@@ -85,8 +85,13 @@ def ensure_dataset(
   client.create_dataset(dataset_resource, exists_ok=True)
 
 
-def _text(row: Mapping[str, Any], key: str) -> str:
-  value = row.get(key)
+def _text(row: Any, key: str) -> str:
+  if isinstance(row, Finding):
+    value = getattr(row, key, None)
+  elif hasattr(row, "get"):
+    value = row.get(key)
+  else:
+    value = getattr(row, key, None)
   return str(value).strip() if value is not None else ""
 
 
@@ -97,7 +102,9 @@ def _int_or_none(value: Any) -> Optional[int]:
     return None
 
 
-def _row_key(row: Mapping[str, Any]) -> Tuple[str, str]:
+def _row_key(row: Any) -> Tuple[str, str]:
+  if isinstance(row, Finding):
+    return row.row_key
   repository = _text(row, "repository")
   finding_id = _text(row, "finding_id")
   if not repository or not finding_id:
@@ -106,12 +113,14 @@ def _row_key(row: Mapping[str, Any]) -> Tuple[str, str]:
 
 
 def deduplicate_rows_by_key(
-    rows: Iterable[Mapping[str, Any]],
+    rows: Iterable[Any],
 ) -> List[Dict[str, Any]]:
   """Keeps the last row for each (repository, finding_id) pair."""
   keyed: Dict[Tuple[str, str], Dict[str, Any]] = {}
   for row in rows:
-    if isinstance(row, dict):
+    if isinstance(row, Finding):
+      keyed[row.row_key] = row.to_bq_row()
+    elif isinstance(row, dict):
       keyed[_row_key(row)] = dict(row)
     elif hasattr(row, "items"):
       keyed[_row_key(row)] = dict(row.items())
@@ -120,17 +129,24 @@ def deduplicate_rows_by_key(
   return list(keyed.values())
 
 
-def _finding_value(finding: Mapping[str, Any], snake: str, pascal: str) -> Any:
-  value = finding.get(snake)
-  return finding.get(pascal) if value is None else value
+def _finding_value(finding: Any, snake: str, pascal: str) -> Any:
+  if isinstance(finding, Finding):
+    val = getattr(finding, snake, None)
+    return getattr(finding, pascal, None) if val is None else val
+  value = finding.get(snake) if hasattr(finding, "get") else getattr(finding, snake, None)
+  return (finding.get(pascal) if hasattr(finding, "get") else getattr(finding, pascal, None)) if value is None else value
 
 
-def _finding_id(finding: Mapping[str, Any]) -> str:
+def _finding_id(finding: Any) -> str:
+  if isinstance(finding, Finding):
+    return finding.finding_id
   value = _finding_value(finding, "finding_id", "FindingID")
   return str(value) if value else ""
 
 
-def _is_repo_finding(finding: Mapping[str, Any], repo_dir: str) -> bool:
+def _is_repo_finding(finding: Any, repo_dir: str) -> bool:
+  if isinstance(finding, Finding):
+    return finding.is_repo_finding(repo_dir)
   file_path = _finding_value(finding, "file_path", "FilePath")
   if not file_path:
     return False
@@ -180,8 +196,10 @@ def compute_finding_fingerprint(
   return hashlib.sha256(raw_hash_str.encode("utf-8")).hexdigest()[:8]
 
 
-def build_cm_import_record(row: Mapping[str, Any]) -> Dict[str, Any]:
+def build_cm_import_record(row: Any) -> Dict[str, Any]:
   """Converts one telemetry row to the simple-JSON dialect accepted by CodeMender."""
+  if isinstance(row, Finding):
+    return row.to_cm_import_record()
   file_path = _text(row, "file_path")
   if not file_path:
     raise ValueError("A BigQuery finding without file_path cannot be imported")

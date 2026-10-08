@@ -7,7 +7,6 @@ between CodeMender CLI formats and BigQuery telemetry formats.
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 import hashlib
 import os
@@ -164,53 +163,187 @@ def compute_finding_fingerprint(
 # --- Main Finding Class ---
 
 
-@dataclasses.dataclass
 class Finding:
-  """Unified representation of a security vulnerability finding."""
+  """Unified representation of a security vulnerability finding wrapping a raw dict."""
 
-  finding_id: str = ""
-  repository: Optional[str] = None
-  file_path: str = ""
-  start_line: Optional[int] = None
-  end_line: Optional[int] = None
-  title: str = ""
-  vuln_type: Optional[str] = None
-  vuln_id: Optional[str] = None
-  cwe_id: Optional[str] = None
-  severity: Optional[str] = None
-  confidence_level: Optional[str] = None
-  status: str = "DETECTED"
-  source_stage: Optional[str] = None
-  verified: Optional[bool] = None
-  muted: Optional[bool] = None
-  mute_reason: Optional[str] = None
-  fingerprint: Optional[str] = None
-  fix_pr_url: Optional[str] = None
-  patch_status: Optional[str] = None
-  finding_source: Optional[str] = "codemender"
-  analysis: Optional[str] = None
-  snippet: Optional[str] = None
-  scan_id: Optional[str] = None
-  scan_timestamp: Optional[str] = None
-  session_id: Optional[str] = None
-  updated_at: Optional[str] = None
-  raw_data: Dict[str, Any] = dataclasses.field(default_factory=dict)
+  def __init__(
+      self,
+      raw: Optional[Mapping[str, Any]] = None,
+      **kwargs: Any,
+  ):
+    self._raw: Dict[str, Any] = {}
+    if raw:
+      self._raw.update(dict(raw.items()) if hasattr(raw, "items") else dict(raw))
+    if kwargs:
+      self._raw.update(kwargs)
 
-  def __post_init__(self):
-    if self.finding_id is not None:
-      self.finding_id = str(self.finding_id).strip()
-    if self.file_path:
-      self.file_path = normalize_repo_relative_path(str(self.file_path))
-    if self.severity:
-      self.severity = self.severity.upper()
-    if self.status:
-      self.status = self.status.upper()
-    if not self.cwe_id and (self.vuln_id or self.vuln_type or self.title):
-      self.cwe_id = extract_cwe_id(self.vuln_id, self.vuln_type, self.title)
-    if not self.fingerprint and self.file_path and self.start_line is not None:
-      self.fingerprint = compute_finding_fingerprint(
+    # Normalize file_path in raw if present
+    if "file_path" in self._raw and self._raw["file_path"]:
+      self._raw["file_path"] = normalize_repo_relative_path(str(self._raw["file_path"]))
+    elif "FilePath" in self._raw and self._raw["FilePath"]:
+      self._raw["FilePath"] = normalize_repo_relative_path(str(self._raw["FilePath"]))
+
+  def _get(self, *keys: str) -> Any:
+    for k in keys:
+      if k in self._raw and self._raw[k] is not None:
+        return self._raw[k]
+    return None
+
+  # --- Properties ---
+
+  @property
+  def raw(self) -> Dict[str, Any]:
+    return self._raw
+
+  @property
+  def raw_data(self) -> Dict[str, Any]:
+    return self._raw
+
+  @property
+  def finding_id(self) -> str:
+    val = self._get("finding_id", "FindingID", "id")
+    return str(val).strip() if val is not None else ""
+
+  @property
+  def repository(self) -> Optional[str]:
+    return _as_str(self._get("repository", "Repository"))
+
+  @property
+  def file_path(self) -> str:
+    val = self._get("file_path", "FilePath", "path")
+    if not val:
+      return ""
+    return normalize_repo_relative_path(str(val))
+
+  @property
+  def start_line(self) -> Optional[int]:
+    return _as_int(self._get("start_line", "StartLine", "line", "Line"))
+
+  @property
+  def line(self) -> Optional[int]:
+    return self.start_line
+
+  @property
+  def end_line(self) -> Optional[int]:
+    return _as_int(self._get("end_line", "EndLine"))
+
+  @property
+  def title(self) -> str:
+    return _as_str(self._get("title", "Title")) or ""
+
+  @property
+  def vuln_type(self) -> Optional[str]:
+    return _as_str(self._get("vuln_type", "VulnType", "type"))
+
+  @property
+  def vuln_id(self) -> Optional[str]:
+    return _as_str(self._get("vuln_id", "VulnID"))
+
+  @property
+  def cwe_id(self) -> Optional[str]:
+    val = _as_str(self._get("cwe_id", "CweID"))
+    if val:
+      return val
+    return extract_cwe_id(self.vuln_id, self.vuln_type, self.title)
+
+  @property
+  def severity(self) -> Optional[str]:
+    val = _as_str(self._get("severity", "Severity"))
+    return val.upper() if val else None
+
+  @property
+  def confidence_level(self) -> Optional[str]:
+    val = _as_str(
+        self._get("confidence_level", "ConfidenceLevel", "confidence", "Confidence")
+    )
+    return val.upper() if val else None
+
+  @property
+  def confidence(self) -> Optional[str]:
+    return self.confidence_level
+
+  @property
+  def status(self) -> str:
+    val = _as_str(self._get("status", "Status")) or "DETECTED"
+    return val.upper()
+
+  @property
+  def source_stage(self) -> Optional[str]:
+    return _as_str(self._get("source_stage", "SourceStage"))
+
+  @property
+  def verified(self) -> Optional[bool]:
+    return _as_bool(self._get("verified", "Verified"))
+
+  @property
+  def muted(self) -> Optional[bool]:
+    return _as_bool(self._get("muted", "Muted"))
+
+  @property
+  def mute_reason(self) -> Optional[str]:
+    return _as_str(
+        self._get("mute_reason", "MuteReason", "dismiss_reason", "DismissReason")
+    )
+
+  @property
+  def fingerprint(self) -> Optional[str]:
+    val = _as_str(self._get("fingerprint", "Fingerprint"))
+    if val:
+      return val
+    if self.file_path and self.start_line is not None:
+      fp = compute_finding_fingerprint(
           self.file_path, self.vuln_type or "vulnerability", self.start_line
       )
+      self._raw["fingerprint"] = fp
+      return fp
+    return None
+
+  @property
+  def fix_pr_url(self) -> Optional[str]:
+    return _as_str(self._get("fix_pr_url", "FixPrUrl", "fix_pr", "FixPr"))
+
+  @property
+  def patch_status(self) -> Optional[str]:
+    return _as_str(self._get("patch_status", "PatchStatus"))
+
+  @property
+  def finding_source(self) -> Optional[str]:
+    return _as_str(self._get("finding_source", "FindingSource")) or "codemender"
+
+  @property
+  def analysis(self) -> Optional[str]:
+    return _as_str(self._get("analysis", "Analysis", "message", "Message"))
+
+  @property
+  def message(self) -> Optional[str]:
+    return self.analysis
+
+  @property
+  def snippet(self) -> Optional[str]:
+    return _as_str(self._get("snippet", "Snippet"))
+
+  @property
+  def scan_id(self) -> Optional[str]:
+    return _as_str(self._get("scan_id", "ScanID"))
+
+  @property
+  def scan_timestamp(self) -> Optional[str]:
+    return _as_str(self._get("scan_timestamp", "ScanTimestamp"))
+
+  @property
+  def session_id(self) -> Optional[str]:
+    return _as_str(self._get("session_id", "SessionID"))
+
+  @property
+  def updated_at(self) -> Optional[str]:
+    return _as_str(self._get("updated_at", "UpdatedAt"))
+
+  @property
+  def row_key(self) -> Tuple[str, str]:
+    """Returns composite primary key (repository, finding_id)."""
+    if not self.repository or not self.finding_id:
+      raise ValueError("A unique finding must have repository and finding_id")
+    return self.repository, self.finding_id
 
   # --- Factory Methods ---
 
@@ -225,88 +358,15 @@ class Finding:
       return data
 
     raw: Dict[str, Any] = dict(data.items()) if hasattr(data, "items") else dict(data)
-
-    def _get(*keys: str) -> Any:
-      for k in keys:
-        if k in raw and raw[k] is not None:
-          return raw[k]
-      return None
-
-    finding_id = str(_get("finding_id", "FindingID", "id") or "")
-    repository = _as_str(_get("repository", "Repository"))
-    raw_path = _get("file_path", "FilePath", "path") or ""
-    file_path = normalize_repo_relative_path(str(raw_path), repo_dir)
-
-    start_line = _as_int(_get("start_line", "StartLine", "line", "Line"))
-    end_line = _as_int(_get("end_line", "EndLine"))
-
-    title = _as_str(_get("title", "Title")) or ""
-    vuln_type = _as_str(_get("vuln_type", "VulnType", "type"))
-    vuln_id = _as_str(_get("vuln_id", "VulnID"))
-    cwe_id = _as_str(_get("cwe_id", "CweID")) or extract_cwe_id(vuln_id, vuln_type, title)
-
-    severity = _as_str(_get("severity", "Severity"))
-    if severity:
-      severity = severity.upper()
-
-    confidence_level = _as_str(
-        _get("confidence_level", "ConfidenceLevel", "confidence", "Confidence")
-    )
-    if confidence_level:
-      confidence_level = confidence_level.upper()
-
-    status = _as_str(_get("status", "Status")) or "DETECTED"
-    status = status.upper()
-
-    source_stage = _as_str(_get("source_stage", "SourceStage"))
-    verified = _as_bool(_get("verified", "Verified"))
-    muted = _as_bool(_get("muted", "Muted"))
-    mute_reason = _as_str(
-        _get("mute_reason", "MuteReason", "dismiss_reason", "DismissReason")
-    )
-    fingerprint = _as_str(_get("fingerprint", "Fingerprint"))
-
-    fix_pr_url = _as_str(_get("fix_pr_url", "FixPrUrl", "fix_pr", "FixPr"))
-    patch_status = _as_str(_get("patch_status", "PatchStatus"))
-    finding_source = _as_str(_get("finding_source", "FindingSource")) or "codemender"
-
-    analysis = _as_str(_get("analysis", "Analysis", "message", "Message"))
-    snippet = _as_str(_get("snippet", "Snippet"))
-
-    scan_id = _as_str(_get("scan_id", "ScanID"))
-    scan_timestamp = _as_str(_get("scan_timestamp", "ScanTimestamp"))
-    session_id = _as_str(_get("session_id", "SessionID"))
-    updated_at = _as_str(_get("updated_at", "UpdatedAt"))
-
-    return cls(
-        finding_id=finding_id,
-        repository=repository,
-        file_path=file_path,
-        start_line=start_line,
-        end_line=end_line,
-        title=title,
-        vuln_type=vuln_type,
-        vuln_id=vuln_id,
-        cwe_id=cwe_id,
-        severity=severity,
-        confidence_level=confidence_level,
-        status=status,
-        source_stage=source_stage,
-        verified=verified,
-        muted=muted,
-        mute_reason=mute_reason,
-        fingerprint=fingerprint,
-        fix_pr_url=fix_pr_url,
-        patch_status=patch_status,
-        finding_source=finding_source,
-        analysis=analysis,
-        snippet=snippet,
-        scan_id=scan_id,
-        scan_timestamp=scan_timestamp,
-        session_id=session_id,
-        updated_at=updated_at,
-        raw_data=raw,
-    )
+    if repo_dir:
+      raw_path = raw.get("file_path") or raw.get("FilePath") or raw.get("path")
+      if raw_path:
+        norm = normalize_repo_relative_path(str(raw_path), repo_dir)
+        if "file_path" in raw:
+          raw["file_path"] = norm
+        elif "FilePath" in raw:
+          raw["FilePath"] = norm
+    return cls(raw)
 
   @classmethod
   def from_bq_row(
@@ -322,24 +382,18 @@ class Finding:
     """Explicit factory for findings produced by CodeMender CLI."""
     return cls.from_dict(item, repo_dir=repo_dir)
 
-  # --- Key & Fingerprint Properties ---
-
-  @property
-  def row_key(self) -> Tuple[str, str]:
-    """Returns composite primary key (repository, finding_id)."""
-    if not self.repository or not self.finding_id:
-      raise ValueError("A unique finding must have repository and finding_id")
-    return self.repository, self.finding_id
+  # --- Domain Methods ---
 
   def compute_fingerprint(self, repo_dir: Optional[str] = None) -> str:
     """Computes or retrieves deterministic SHA256 fingerprint."""
-    if self.fingerprint:
-      return self.fingerprint
+    val = _as_str(self._get("fingerprint", "Fingerprint"))
+    if val:
+      return val
     norm_path = normalize_repo_relative_path(self.file_path, repo_dir)
     fp = compute_finding_fingerprint(
         norm_path, self.vuln_type or "vulnerability", self.start_line or 0
     )
-    self.fingerprint = fp
+    self._raw["fingerprint"] = fp
     return fp
 
   def is_repo_finding(self, repo_dir: str) -> bool:
@@ -355,7 +409,7 @@ class Finding:
 
   def is_closed(self) -> bool:
     """Whether finding status is closed/remediated."""
-    return (self.status or "").upper() in _CLOSED_STATUSES
+    return self.status in _CLOSED_STATUSES
 
   def is_verified(
       self, force_verified: bool = False, skip_verify: Optional[bool] = None
@@ -424,7 +478,6 @@ class Finding:
         "SessionID": self.session_id,
         "UpdatedAt": self.updated_at,
     }
-    # Add snake_case aliases for compatibility
     for snake, pascal in _FINDING_KEY_ALIASES.items():
       if pascal in d and snake not in d:
         d[snake] = d[pascal]
@@ -460,39 +513,24 @@ class Finding:
       wiz_ids: Optional[Iterable[str]] = None,
       skip_verify: Optional[bool] = None,
       with_snippets: bool = True,
+      **kwargs: Any,
   ) -> Dict[str, Any]:
-    """Transforms finding into a BigQuery `findings` schema table row."""
-    wiz_set = {str(i) for i in (wiz_ids or [])}
-    force_verified = self.finding_id in wiz_set
-    pr_map = prs or {}
-
-    row: Dict[str, Any] = {
-        "finding_id": self.finding_id,
-        "scan_id": scan_id or self.scan_id or "unknown",
-        "scan_timestamp": scan_timestamp or self.scan_timestamp or _utc_now_iso(),
-        "repository": repository or self.repository or "",
-        "title": self.title,
-        "vuln_type": self.vuln_type,
-        "cwe_id": self.cwe_id or extract_cwe_id(self.vuln_id, self.vuln_type, self.title),
-        "severity": self.severity.upper() if self.severity else None,
-        "confidence_level": self.confidence_level.upper() if self.confidence_level else None,
-        "file_path": self.file_path,
-        "start_line": self.start_line,
-        "end_line": self.end_line,
-        "status": self.status.upper() if self.status else "DETECTED",
-        "source_stage": self.source_stage,
-        "verified": self.is_verified(force_verified=force_verified, skip_verify=skip_verify),
-        "muted": self.muted,
-        "mute_reason": self.mute_reason,
-        "fingerprint": self.fingerprint or self.compute_fingerprint(),
-        "fix_pr_url": pr_map.get(self.finding_id) or self.fix_pr_url,
-        "patch_status": self.patch_status,
-        "finding_source": "wiz" if force_verified else (self.finding_source or "codemender"),
-    }
-    if with_snippets:
-      row["analysis"] = self.analysis
-      row["snippet"] = self.snippet
-    return row
+    """Returns the raw dictionary representing the BigQuery row."""
+    if scan_id is not None:
+      self._raw["scan_id"] = scan_id
+    if scan_timestamp is not None:
+      self._raw["scan_timestamp"] = scan_timestamp
+    if repository is not None:
+      self._raw["repository"] = repository
+    if prs and self.finding_id in prs:
+      self._raw["fix_pr_url"] = prs[self.finding_id]
+    if wiz_ids and self.finding_id in {str(i) for i in wiz_ids}:
+      self._raw["verified"] = True
+      self._raw["finding_source"] = "wiz"
+    if not with_snippets:
+      self._raw.pop("analysis", None)
+      self._raw.pop("snippet", None)
+    return self._raw
 
   def to_telemetry_dict(
       self, repo_dir: Optional[str] = None, source_finding_id: Optional[str] = None
@@ -506,53 +544,13 @@ class Finding:
       d["fingerprint"] = self.compute_fingerprint(repo_dir)
     return d
 
-  # --- Dictionary-like Protocol (Backwards Compatibility) ---
+  def __repr__(self) -> str:
+    return f"Finding(finding_id={self.finding_id!r}, file_path={self.file_path!r}, status={self.status!r})"
 
-  def __getitem__(self, key: str) -> Any:
-    norm_key = _PASCAL_TO_SNAKE.get(key, key)
-    if hasattr(self, norm_key):
-      val = getattr(self, norm_key)
-      if val is not None:
-        return val
-    if key in self.raw_data:
-      return self.raw_data[key]
-    if hasattr(self, norm_key):
-      return getattr(self, norm_key)
-    raise KeyError(key)
-
-  def __setitem__(self, key: str, value: Any) -> None:
-    norm_key = _PASCAL_TO_SNAKE.get(key, key)
-    if hasattr(self, norm_key):
-      setattr(self, norm_key, value)
-    self.raw_data[key] = value
-
-  def __contains__(self, key: str) -> bool:
-    norm_key = _PASCAL_TO_SNAKE.get(key, key)
-    if hasattr(self, norm_key) and getattr(self, norm_key) is not None:
-      return True
-    return key in self.raw_data and self.raw_data[key] is not None
-
-  def get(self, key: str, default: Any = None) -> Any:
-    norm_key = _PASCAL_TO_SNAKE.get(key, key)
-    if hasattr(self, norm_key):
-      val = getattr(self, norm_key)
-      return val if val is not None else default
-    return self.raw_data.get(key, default)
-
-  def keys(self):
-    return self.to_dict().keys()
-
-  def values(self):
-    return self.to_dict().values()
-
-  def items(self):
-    return self.to_dict().items()
-
-  def __len__(self) -> int:
-    return len(self.to_dict())
-
-  def __iter__(self):
-    return iter(self.to_dict())
+  def __eq__(self, other: Any) -> bool:
+    if isinstance(other, Finding):
+      return self._raw == other._raw
+    return False
 
   # --- Matching & Deduplication Algorithms ---
 
@@ -565,11 +563,17 @@ class Finding:
   ) -> Dict[str, str]:
     """Maps cm IDs to BigQuery finding IDs using finding attributes."""
     required = set(required_cm_ids) if required_cm_ids is not None else None
-    sources = [Finding.from_dict(s, repo_dir) for s in source_findings]
+    sources = [
+        s if isinstance(s, Finding) else Finding.from_dict(s, repo_dir)
+        for s in source_findings
+    ]
     unmatched = list(sources)
     source_ids_by_cm_id: Dict[str, str] = {}
 
-    cms = [Finding.from_dict(c, repo_dir) for c in cm_findings]
+    cms = [
+        c if isinstance(c, Finding) else Finding.from_dict(c, repo_dir)
+        for c in cm_findings
+    ]
     for cm in cms:
       cm_id = cm.finding_id
       if not cm_id or (required is not None and cm_id not in required):
@@ -626,6 +630,9 @@ class Finding:
     """Deduplicates findings by (repository, finding_id), keeping the last."""
     keyed: Dict[Tuple[str, str], Finding] = {}
     for item in findings:
-      finding = Finding.from_dict(item)
+      finding = item if isinstance(item, Finding) else Finding.from_dict(item)
       keyed[finding.row_key] = finding
     return list(keyed.values())
+
+
+Findings = Finding

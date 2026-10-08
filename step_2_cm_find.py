@@ -493,8 +493,18 @@ def read_findings(
   return _parse_findings_json(res.stdout, repo_dir=repo_dir)
 
 
-def _ids(findings: List[Dict[str, Any]]) -> List[str]:
-  return [str(f["FindingID"]) for f in findings if f.get("FindingID")]
+def _ids(findings: Sequence[Any]) -> List[str]:
+  res = []
+  for f in findings:
+    if isinstance(f, Finding):
+      fid = f.finding_id
+    elif hasattr(f, "get"):
+      fid = str(f.get("FindingID") or f.get("finding_id") or "")
+    else:
+      fid = str(getattr(f, "finding_id", ""))
+    if fid:
+      res.append(fid)
+  return res
 
 
 def import_findings(
@@ -503,7 +513,7 @@ def import_findings(
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
     cli_version: Optional[str] = None,
-) -> Tuple[List[str], List[Dict[str, Any]]]:
+) -> Tuple[List[str], List[Finding]]:
   """Imports findings from a file and returns the IDs cm assigned them."""
   if not os.path.isfile(import_file):
     raise FindingImportError("import payload file does not exist")
@@ -533,11 +543,16 @@ def import_findings(
   return assigned, after_findings
 
 
-def write_import_payload(findings: List[Dict[str, Any]], dest_path: str) -> str:
+def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
   """Writes a simple-JSON import payload, keeping only recognized fields."""
-  payload = [
-      {k: f[k] for k in IMPORTED_FINDING_FIELDS if k in f} for f in findings
-  ]
+  payload = []
+  for f in findings:
+    if isinstance(f, Finding):
+      payload.append(f.to_cm_import_record())
+    elif hasattr(f, "__getitem__"):
+      payload.append({k: f[k] for k in IMPORTED_FINDING_FIELDS if k in f})
+    else:
+      payload.append({k: getattr(f, k) for k in IMPORTED_FINDING_FIELDS if hasattr(f, k)})
   os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
   with open(dest_path, "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)
@@ -545,66 +560,18 @@ def write_import_payload(findings: List[Dict[str, Any]], dest_path: str) -> str:
 
 
 def _match_cm_findings_to_source_rows(
-    source_rows: Sequence[Mapping[str, Any]],
-    cm_findings: Sequence[Mapping[str, Any]],
+    source_rows: Sequence[Any],
+    cm_findings: Sequence[Any],
     repo_dir: str,
     required_cm_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, str]:
   """Maps cm IDs to BigQuery finding IDs using stable finding attributes."""
-  required = set(required_cm_ids) if required_cm_ids is not None else None
-  unmatched = list(source_rows)
-  source_ids_by_cm_id: Dict[str, str] = {}
-
-  for cm_finding in cm_findings:
-    cm_id = _finding_id(cm_finding)
-    if not cm_id or (required is not None and cm_id not in required):
-      continue
-    cm_path = normalize_repo_relative_path(
-        str(_finding_value(cm_finding, "file_path", "FilePath") or ""), repo_dir
-    )
-    imported_line = _int_or_none(
-        _finding_value(cm_finding, "start_line", "StartLine")
-    )
-    imported_title = _text(cm_finding, "title") or _text(cm_finding, "Title")
-    imported_type = _text(cm_finding, "vuln_type") or _text(cm_finding, "VulnType")
-    candidates = []
-    for source in unmatched:
-      source_path = normalize_repo_relative_path(_text(source, "file_path"), repo_dir)
-      if source_path != cm_path:
-        continue
-      source_line = _int_or_none(source.get("start_line"))
-      if imported_line is not None and source_line is not None and imported_line != source_line:
-        continue
-      score = 0
-      if imported_title and imported_title == _text(source, "title"):
-        score += 4
-      if imported_type and imported_type == _text(source, "vuln_type"):
-        score += 2
-      if source.get("snippet") and source.get("snippet") == _finding_value(
-          cm_finding, "snippet", "Snippet"
-      ):
-        score += 1
-      candidates.append((score, source))
-
-    if not candidates:
-      if required is not None and cm_id in required:
-        raise ValueError(f"Could not match imported finding {cm_id} to BigQuery source")
-      continue
-    best_score = max(score for score, _ in candidates)
-    best = [source for score, source in candidates if score == best_score]
-    if len(best) != 1:
-      if required is not None and cm_id in required:
-        raise ValueError(f"Imported finding {cm_id} ambiguously matches BigQuery rows")
-      continue
-    source = best[0]
-    source_ids_by_cm_id[cm_id] = _row_key(source)[1]
-    unmatched.remove(source)
-
-  if required is not None:
-    missing = required.difference(source_ids_by_cm_id)
-    if missing:
-      raise ValueError("CodeMender report omitted imported finding IDs: " + ", ".join(sorted(missing)))
-  return source_ids_by_cm_id
+  return Finding.match_findings(
+      source_findings=source_rows,
+      cm_findings=cm_findings,
+      repo_dir=repo_dir,
+      required_cm_ids=required_cm_ids,
+  )
 
 
 def run_cm_find(

@@ -180,24 +180,23 @@ class FindingTests(unittest.TestCase):
     f_verified_status = Finding(finding_id="4", status="VERIFIED")
     self.assertTrue(f_verified_status.is_verified())
 
-  def test_dict_interface(self):
+  def test_property_access_and_no_dict_protocol(self):
     f = Finding(
         finding_id="f-99",
         title="Test Finding",
         file_path="test.py",
         severity="LOW",
     )
-    self.assertEqual(f["finding_id"], "f-99")
-    self.assertEqual(f["FindingID"], "f-99")
-    self.assertEqual(f["Title"], "Test Finding")
-    self.assertEqual(f.get("Severity"), "LOW")
-    self.assertEqual(f.get("nonexistent", "default"), "default")
-    self.assertIn("finding_id", f)
-    self.assertIn("FindingID", f)
+    self.assertEqual(f.finding_id, "f-99")
+    self.assertEqual(f.title, "Test Finding")
+    self.assertEqual(f.file_path, "test.py")
+    self.assertEqual(f.severity, "LOW")
 
-    f["severity"] = "HIGH"
-    self.assertEqual(f["severity"], "HIGH")
-    self.assertEqual(f.severity, "HIGH")
+    # Dict-like indexing should not work
+    with self.assertRaises(TypeError):
+      _ = f["finding_id"]
+    self.assertFalse(hasattr(f, "get"))
+    self.assertIs(f.to_bq_row(), f.raw)
 
   def test_match_findings(self):
     source = [

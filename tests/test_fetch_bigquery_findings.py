@@ -86,7 +86,6 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     self.assertEqual(len(results), 1)
     self.assertIsInstance(results[0], fetcher.Finding)
     self.assertEqual(results[0].finding_id, "f-1")
-    self.assertEqual(results[0]["finding_id"], "f-1")
 
   def test_fetch_latest_findings_handles_exception(self):
     client = MagicMock()

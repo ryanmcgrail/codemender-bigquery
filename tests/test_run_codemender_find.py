@@ -74,9 +74,8 @@ class RunCodeMenderFindTests(unittest.TestCase):
     self.assertEqual(parsed[0].finding_id, "f-1")
     self.assertEqual(parsed[0].file_path, "a.py")
     self.assertEqual(parsed[0].title, "SQLi")
-    self.assertEqual(parsed[0]["FindingID"], "f-1")
-    self.assertEqual(parsed[0]["FilePath"], "a.py")
-    self.assertEqual(parsed[0]["Title"], "SQLi")
+    with self.assertRaises(TypeError):
+      _ = parsed[0]["FindingID"]
 
   def test_write_import_payload(self):
     findings = [
@@ -154,7 +153,9 @@ class RunCodeMenderFindTests(unittest.TestCase):
     with patch.object(finder, "run_command", return_value=proc):
       findings = finder.read_findings("cm", "/tmp/repo")
     self.assertEqual(len(findings), 1)
-    self.assertEqual(findings[0]["FindingID"], "cm-99")
+    self.assertEqual(findings[0].finding_id, "cm-99")
+    with self.assertRaises(TypeError):
+      _ = findings[0]["FindingID"]
 
   def test_import_findings(self):
     before_raw = json.dumps({"findings": [{"FindingID": "cm-1"}]})
