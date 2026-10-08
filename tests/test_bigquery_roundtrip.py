@@ -77,20 +77,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(dataset_resource.location, "us-central1")
     self.assertTrue(client.create_dataset.call_args.kwargs["exists_ok"])
 
-  def test_ensure_findings_table_creates_telemetry_schema(self):
-    client = unittest.mock.MagicMock()
-
-    roundtrip.ensure_vulnerability_findings_table(client, "project", "dataset")
-
-    table = client.create_table.call_args.args[0]
-    fields = {field.name: field for field in table.schema}
-    self.assertEqual(fields["finding_id"].mode, "REQUIRED")
-    self.assertEqual(fields["scan_id"].mode, "REQUIRED")
-    self.assertEqual(fields["scan_timestamp"].field_type, "TIMESTAMP")
-    self.assertEqual(table.time_partitioning.field, "scan_timestamp")
-    self.assertEqual(table.clustering_fields, ["repository", "severity", "vuln_type"])
-    self.assertTrue(client.create_table.call_args.kwargs["exists_ok"])
-
   def test_project_falls_back_to_active_gcloud_configuration(self):
     result = types.SimpleNamespace(
         returncode=0, stdout="test-project-502314\n", stderr=""
@@ -216,7 +202,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
           ),
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
           patch.object(roundtrip, "ensure_dataset"),
-          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",
@@ -252,7 +237,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "_run_cm_find") as cm_find,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
           patch.object(roundtrip, "ensure_dataset"),
-          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",
@@ -288,8 +272,8 @@ class BigQueryRoundtripTests(unittest.TestCase):
 
     merged = roundtrip.merge_current_findings(
       client,
-      "project.dataset.history",
-      "project.dataset.current_findings",
+      "project.dataset.findings",
+      "project.dataset.findings",
       [row],
     )
 
@@ -338,7 +322,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "_run_cm_find") as cm_find,
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
           patch.object(roundtrip, "ensure_dataset"),
-          patch.object(roundtrip, "ensure_vulnerability_findings_table"),
       ):
         summary = roundtrip.run_roundtrip(
             repository="acme/widgets",

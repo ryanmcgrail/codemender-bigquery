@@ -183,7 +183,7 @@ def build_finding_rows(
     finding_prs: Optional[Dict[str, str]] = None,
     with_snippets: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
-  """Maps findings onto BigQuery `vulnerability_findings` rows."""
+  """Maps findings onto BigQuery `findings` rows."""
   if not findings:
     return []
 
@@ -295,51 +295,6 @@ def _to_telemetry_finding(
   return normalized
 
 
-def ensure_vulnerability_findings_table(
-    client: Any,
-    project: str,
-    dataset: str,
-    table_name: str = DEFAULT_TABLE,
-) -> None:
-  """Creates the telemetry-compatible source findings table when absent."""
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  schema = [
-      bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
-      bigquery.SchemaField("repository", "STRING"),
-      bigquery.SchemaField("title", "STRING"),
-      bigquery.SchemaField("vuln_type", "STRING"),
-      bigquery.SchemaField("cwe_id", "STRING"),
-      bigquery.SchemaField("severity", "STRING"),
-      bigquery.SchemaField("confidence_level", "STRING"),
-      bigquery.SchemaField("file_path", "STRING"),
-      bigquery.SchemaField("start_line", "INTEGER"),
-      bigquery.SchemaField("end_line", "INTEGER"),
-      bigquery.SchemaField("status", "STRING"),
-      bigquery.SchemaField("source_stage", "STRING"),
-      bigquery.SchemaField("verified", "BOOLEAN"),
-      bigquery.SchemaField("muted", "BOOLEAN"),
-      bigquery.SchemaField("mute_reason", "STRING"),
-      bigquery.SchemaField("fingerprint", "STRING"),
-      bigquery.SchemaField("fix_pr_url", "STRING"),
-      bigquery.SchemaField("patch_status", "STRING"),
-      bigquery.SchemaField("analysis", "STRING"),
-      bigquery.SchemaField("snippet", "STRING"),
-      bigquery.SchemaField("finding_source", "STRING"),
-  ]
-  table = bigquery.Table(
-      _table_id(project, dataset, table_name), schema=schema
-  )
-  table.time_partitioning = bigquery.TimePartitioning(
-      type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
-  )
-  table.clustering_fields = ["repository", "severity", "vuln_type"]
-  table.description = "One row per CodeMender vulnerability finding."
-  client.create_table(table, exists_ok=True)
-
-
 def merge_current_findings(
     client: Any,
     table_id: str,
@@ -347,16 +302,19 @@ def merge_current_findings(
     location: Optional[str] = None,
     **kwargs: Any,
 ) -> int:
-  """MERGEs rows by repository/finding_id into a separate current-state table."""
+  """MERGEs rows by repository/finding_id into the findings table."""
   if len(args) >= 2:
+    source_table_id = table_id
     target_table_id = str(args[0])
     rows = args[1]
     if len(args) >= 3 and location is None:
       location = args[2]
   elif len(args) == 1:
+    source_table_id = table_id
     target_table_id = table_id
     rows = args[0]
   else:
+    source_table_id = table_id
     target_table_id = table_id
     rows = kwargs.get("rows", [])
 
@@ -365,19 +323,61 @@ def merge_current_findings(
 
   table_id = target_table_id
 
-  client.query(
-      f"CREATE TABLE IF NOT EXISTS `{table_id}` "
-      f"AS SELECT * FROM `{table_id}` WHERE FALSE",
-      location=location,
-  ).result()
-  target_table = client.get_table(table_id)
-  schema = target_table.schema
+  if source_table_id != target_table_id:
+    client.query(
+        f"CREATE TABLE IF NOT EXISTS `{target_table_id}` "
+        f"AS SELECT * FROM `{source_table_id}` WHERE FALSE",
+        location=location,
+    ).result()
+
+  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
+
+  try:
+    target_table = client.get_table(table_id)
+    schema = target_table.schema
+  except Exception:
+    schema = [
+        bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("repository", "STRING"),
+        bigquery.SchemaField("title", "STRING"),
+        bigquery.SchemaField("vuln_type", "STRING"),
+        bigquery.SchemaField("cwe_id", "STRING"),
+        bigquery.SchemaField("severity", "STRING"),
+        bigquery.SchemaField("confidence_level", "STRING"),
+        bigquery.SchemaField("file_path", "STRING"),
+        bigquery.SchemaField("start_line", "INTEGER"),
+        bigquery.SchemaField("end_line", "INTEGER"),
+        bigquery.SchemaField("status", "STRING"),
+        bigquery.SchemaField("source_stage", "STRING"),
+        bigquery.SchemaField("verified", "BOOLEAN"),
+        bigquery.SchemaField("muted", "BOOLEAN"),
+        bigquery.SchemaField("mute_reason", "STRING"),
+        bigquery.SchemaField("fingerprint", "STRING"),
+        bigquery.SchemaField("fix_pr_url", "STRING"),
+        bigquery.SchemaField("patch_status", "STRING"),
+        bigquery.SchemaField("analysis", "STRING"),
+        bigquery.SchemaField("snippet", "STRING"),
+        bigquery.SchemaField("finding_source", "STRING"),
+    ]
+    table = bigquery.Table(table_id, schema=schema)
+    table.time_partitioning = bigquery.TimePartitioning(
+        type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
+    )
+    table.clustering_fields = ["repository", "severity", "vuln_type"]
+    table.description = "One row per CodeMender vulnerability finding."
+    try:
+      client.create_table(table, exists_ok=True)
+    except Exception:
+      pass
+
   columns = [field.name for field in schema]
   identity = {"repository", "finding_id"}
   missing_identity = identity.difference(columns)
   if missing_identity:
     raise ValueError(
-        "Current-state table is missing key columns: "
+        "Findings table is missing key columns: "
         + ", ".join(sorted(missing_identity))
     )
 

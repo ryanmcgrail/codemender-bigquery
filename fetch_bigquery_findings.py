@@ -11,7 +11,7 @@ Example usage:
     --repository ryanmcgrail/juice-shop \
     --project test-project-502314 \
     --dataset codemender_juice_shop \
-    --table current_findings_by_id
+    --table findings
 """
 
 import argparse

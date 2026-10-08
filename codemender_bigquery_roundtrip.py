@@ -5,8 +5,7 @@ Example:
     --repository acme/widgets --repo-dir /work/widgets \
     --project my-gcp-project --dataset codemender_telemetry
 
-The historical ``vulnerability_findings`` table remains append-only. Results
-are merged into ``current_findings_by_id`` using
+Findings are fetched from and merged into the ``findings`` table using
 ``(repository, finding_id)`` as the logical key.
 """
 
@@ -547,7 +546,6 @@ from export_bigquery_findings import (
     _fingerprint_for_cm_finding,
     _to_telemetry_finding,
     build_finding_rows,
-    ensure_vulnerability_findings_table,
     export_findings_to_bigquery,
     merge_current_findings,
 )

@@ -108,20 +108,6 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     self.assertTrue(row["verified"])
     self.assertEqual(row["finding_source"], "codemender")
 
-  def test_ensure_vulnerability_findings_table(self):
-    client = MagicMock()
-    exporter.ensure_vulnerability_findings_table(client, "project", "dataset", "my_findings")
-
-    table = client.create_table.call_args.args[0]
-    fields = {f.name: f for f in table.schema}
-    self.assertIn("finding_id", fields)
-    self.assertIn("scan_id", fields)
-    self.assertIn("scan_timestamp", fields)
-    self.assertEqual(table.table_id, "my_findings")
-    self.assertEqual(table.dataset_id, "dataset")
-    self.assertEqual(table.project, "project")
-    self.assertTrue(client.create_table.call_args.kwargs["exists_ok"])
-
   def test_merge_current_findings(self):
     client = _MockClient()
     rows = [
