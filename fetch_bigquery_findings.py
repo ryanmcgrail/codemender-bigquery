@@ -12,7 +12,6 @@ Example usage:
 """
 
 import argparse
-import datetime
 import hashlib
 import json
 import logging
@@ -38,9 +37,6 @@ _PROJECT_FALLBACK_ENV_KEYS = (
 
 DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
-_CLOSED_STATUSES = frozenset(
-    {"FIXED", "REMEDIATED", "PATCHED", "DISMISSED", "FALSE_POSITIVE", "RESOLVED"}
-)
 
 
 def resolve_dataset() -> Optional[str]:
@@ -132,28 +128,6 @@ def deduplicate_rows_by_key(
     else:
       keyed[_row_key(row)] = dict(row)
   return list(keyed.values())
-
-
-def _finding_value(finding: Mapping[str, Any], snake: str, pascal: str) -> Any:
-  value = finding.get(snake)
-  return finding.get(pascal) if value is None else value
-
-
-def _finding_id(finding: Mapping[str, Any]) -> str:
-  value = _finding_value(finding, "finding_id", "FindingID")
-  return str(value) if value else ""
-
-
-def _is_repo_finding(finding: Mapping[str, Any], repo_dir: str) -> bool:
-  file_path = _finding_value(finding, "file_path", "FilePath")
-  if not file_path:
-    return False
-  clean_repo = os.path.abspath(repo_dir).replace("\\", "/")
-  raw = str(file_path).strip().replace("\\", "/")
-  if os.path.isabs(raw):
-    clean_path = os.path.abspath(raw).replace("\\", "/")
-    return clean_path == clean_repo or clean_path.startswith(clean_repo + "/")
-  return not raw.startswith("/")
 
 
 def normalize_repo_relative_path(path: str, repo_dir: Optional[str] = None) -> str:
