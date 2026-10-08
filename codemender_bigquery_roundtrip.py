@@ -14,22 +14,46 @@ import json
 import logging
 import os
 from pprint import pprint
+import re
 import shutil
 import sys
+import subprocess
 import tempfile
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+import uuid
 
 from run_codemender_find import (
+    FindingImportError,
+    IMPORTED_FINDING_FIELDS,
+    SECRET_PATTERNS,
+    _ids,
     _match_cm_findings_to_source_rows,
+    _run_cm_action,
     _run_cm_find,
+    build_cm_command,
+    extract_json_from_output,
+    filter_supported_flags,
+    get_supported_cm_flags,
     import_findings,
+    is_ci_gate_exit,
+    parse_findings_json,
+    parse_help_flags,
+    parse_token_metric,
     read_findings,
+    redact_sensitive_arg,
+    resolve_command_flags,
+    resolve_command_model,
+    run_cm_action,
+    run_cm_find,
+    run_command,
     write_import_payload,
 )
 
 
 from export_bigquery_findings import (
     ScanRunContext,
+    _fingerprint_for_cm_finding,
+    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,
@@ -37,13 +61,20 @@ from export_bigquery_findings import (
 from fetch_bigquery_findings import (
     DEFAULT_TABLE,
     _finding_id,
+    _finding_value,
+    _int_or_none,
     _is_repo_finding,
+    _latest_findings_query,
     _resolve_project,
     _row_key,
     _table_id,
+    _text,
     build_cm_import_record,
+    compute_finding_fingerprint,
+    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_latest_findings,
+    normalize_repo_relative_path,
     resolve_dataset,
     resolve_project,
 )
@@ -165,11 +196,14 @@ def run_roundtrip(
   source_ids_by_cm_id.update(imported_source_ids)
   ids_to_process = set(source_ids_by_cm_id)
 
+  findings_by_id = {_finding_id(row): row for row in post_import_findings}
+
   after_findings = (
       list(post_import_findings)
       if scan_only
       else read_findings(cm_binary, repo_dir, cli_version=cli_version)
   )
+  final_findings_by_id = {_finding_id(row): row for row in after_findings}
 
   _print_heading("Exporting findings to BigQuery...")
   merged = export_findings_to_bigquery(
