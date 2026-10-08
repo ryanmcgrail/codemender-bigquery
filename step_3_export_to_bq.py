@@ -118,14 +118,6 @@ def _row_verified(
   return _as_bool(finding.get("verified"))
 
 
-def include_snippets() -> bool:
-  """Whether LLM analysis prose and raw source snippets may be exported."""
-  raw = os.environ.get("CODEMENDER_BQ_INCLUDE_SNIPPETS")
-  if raw is None or not raw.strip():
-    return False
-  return raw.strip().lower() in _TRUTHY
-
-
 @dataclasses.dataclass
 class ScanRunContext:
   """Mutable accumulator for the facts that make up one scan run."""
@@ -173,9 +165,6 @@ def build_finding_rows(
   repository = _as_str(ctx.repository)
   prs = finding_prs or {}
   repo_dir = _as_str(ctx.repo_dir)
-  emit_sensitive = (
-      include_snippets() if with_snippets is None else bool(with_snippets)
-  )
   wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
 
   rows: List[Dict[str, Any]] = []
@@ -217,11 +206,9 @@ def build_finding_rows(
         "fix_pr_url": _as_str(prs.get(finding_id)),
         "patch_status": _as_str(finding.get("patch_status")),
         "finding_source": "wiz" if finding_id in wiz_ids else "codemender",
+        "analysis": _as_str(finding.get("analysis")),
+        "snippet": _as_str(finding.get("snippet"))
     }
-
-    if emit_sensitive:
-      row["analysis"] = _as_str(finding.get("analysis"))
-      row["snippet"] = _as_str(finding.get("snippet"))
 
     rows.append(row)
 

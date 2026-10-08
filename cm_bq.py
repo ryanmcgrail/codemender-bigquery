@@ -196,14 +196,11 @@ def run_roundtrip(
   source_ids_by_cm_id.update(imported_source_ids)
   ids_to_process = set(source_ids_by_cm_id)
 
-  findings_by_id = {_finding_id(row): row for row in post_import_findings}
-
   after_findings = (
       list(post_import_findings)
       if scan_only
       else read_findings(cm_binary, repo_dir, cli_version=cli_version)
   )
-  final_findings_by_id = {_finding_id(row): row for row in after_findings}
 
   _print_heading("Exporting findings to BigQuery...")
   merged = export_findings_to_bigquery(
