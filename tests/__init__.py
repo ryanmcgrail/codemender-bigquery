@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests suite for CodeMender Agent submodules."""
+"""Unit tests suite for CodeMender BigQuery roundtrip scripts."""
