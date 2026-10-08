@@ -27,10 +27,18 @@ from codemender_agent.codemender.importer import import_findings
 from codemender_agent.codemender.importer import read_findings
 from codemender_agent.codemender.importer import write_import_payload
 from codemender_agent.codemender.cli import is_ci_gate_exit
-from codemender_agent.telemetry import bigquery as telemetry
 from codemender_agent.utils import build_cm_command
 from codemender_agent.utils import run_command
 
+from export_bigquery_findings import (
+    ScanRunContext,
+    _fingerprint_for_cm_finding,
+    _to_telemetry_finding,
+    build_finding_rows,
+    ensure_vulnerability_findings_table,
+    export_findings_to_bigquery,
+    merge_current_findings,
+)
 from fetch_bigquery_findings import (
     DEFAULT_TABLE,
     _finding_id,
@@ -52,24 +60,15 @@ from fetch_bigquery_findings import (
     resolve_project,
 )
 
+import types
+telemetry = types.SimpleNamespace(
+    resolve_project=resolve_project,
+    resolve_dataset=resolve_dataset,
+    ScanRunContext=ScanRunContext,
+    build_finding_rows=build_finding_rows,
+)
+
 logger = logging.getLogger("codemender-bigquery-roundtrip")
-
-
-def _fingerprint_for_cm_finding(
-    finding: Mapping[str, Any], repo_dir: str,
-) -> Optional[str]:
-  fingerprint = _finding_value(finding, "fingerprint", "Fingerprint")
-  if fingerprint:
-    return str(fingerprint)
-  file_path = _finding_value(finding, "file_path", "FilePath")
-  vuln_type = _finding_value(finding, "vuln_type", "VulnType")
-  start_line = _finding_value(finding, "start_line", "StartLine")
-  if not file_path:
-    return None
-  path = normalize_repo_relative_path(str(file_path), repo_dir)
-  return compute_finding_fingerprint(
-      path, str(vuln_type or "vulnerability"), _int_or_none(start_line) or 0
-  )
 
 
 def _match_cm_findings_to_source_rows(
@@ -135,32 +134,7 @@ def _match_cm_findings_to_source_rows(
   return source_ids_by_cm_id
 
 
-def _to_telemetry_finding(
-  finding: Mapping[str, Any], repo_dir: str, source_finding_id: Optional[str] = None,
-) -> Dict[str, Any]:
-  """Maps canonical or snake_case cm report output to the telemetry mapper."""
-  field_names = (
-      "title", "file_path", "severity", "confidence", "confidence_level",
-      "analysis", "snippet", "vuln_type", "vuln_id", "verified", "muted",
-      "mute_reason", "status", "source_stage", "start_line", "end_line",
-      "dismiss_reason", "updated_at",
-  )
-  normalized = {
-      "finding_id": _finding_id(finding),
-      "fingerprint": _fingerprint_for_cm_finding(finding, repo_dir),
-  }
-  aliases = {
-      "confidence_level": "ConfidenceLevel",
-      "vuln_id": "VulnID",
-  }
-  for field in field_names:
-    pascal = aliases.get(field, "".join(part.capitalize() for part in field.split("_")))
-    value = _finding_value(finding, field, pascal)
-    if value is not None:
-      normalized[field] = value
-  if source_finding_id:
-    normalized["finding_id"] = source_finding_id
-  return normalized
+
 
 
 def _run_cm_find(
@@ -190,124 +164,7 @@ def _run_cm_action(
   return returncode
 
 
-def ensure_vulnerability_findings_table(
-    client: Any,
-    project: str,
-    dataset: str,
-    table_name: str = DEFAULT_TABLE,
-) -> None:
-  """Creates the telemetry-compatible source findings table when absent."""
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
-  schema = [
-      bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
-      bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
-      bigquery.SchemaField("repository", "STRING"),
-      bigquery.SchemaField("title", "STRING"),
-      bigquery.SchemaField("vuln_type", "STRING"),
-      bigquery.SchemaField("cwe_id", "STRING"),
-      bigquery.SchemaField("severity", "STRING"),
-      bigquery.SchemaField("confidence_level", "STRING"),
-      bigquery.SchemaField("file_path", "STRING"),
-      bigquery.SchemaField("start_line", "INTEGER"),
-      bigquery.SchemaField("end_line", "INTEGER"),
-      bigquery.SchemaField("status", "STRING"),
-      bigquery.SchemaField("source_stage", "STRING"),
-      bigquery.SchemaField("verified", "BOOLEAN"),
-      bigquery.SchemaField("muted", "BOOLEAN"),
-      bigquery.SchemaField("mute_reason", "STRING"),
-      bigquery.SchemaField("fingerprint", "STRING"),
-      bigquery.SchemaField("fix_pr_url", "STRING"),
-      bigquery.SchemaField("patch_status", "STRING"),
-      bigquery.SchemaField("analysis", "STRING"),
-      bigquery.SchemaField("snippet", "STRING"),
-      bigquery.SchemaField("finding_source", "STRING"),
-  ]
-  table = bigquery.Table(
-      _table_id(project, dataset, table_name), schema=schema
-  )
-  table.time_partitioning = bigquery.TimePartitioning(
-      type_=bigquery.TimePartitioningType.DAY, field="scan_timestamp"
-  )
-  table.clustering_fields = ["repository", "severity", "vuln_type"]
-  table.description = "One row per CodeMender vulnerability finding."
-  client.create_table(table, exists_ok=True)
-
-
-def merge_current_findings(
-    client: Any,
-    table_id: str,
-    *args: Any,
-    location: Optional[str] = None,
-    **kwargs: Any,
-) -> int:
-  """MERGEs rows by repository/finding_id into a separate current-state table."""
-  if len(args) >= 2:
-    target_table_id = str(args[0])
-    rows = args[1]
-    if len(args) >= 3 and location is None:
-      location = args[2]
-  elif len(args) == 1:
-    target_table_id = table_id
-    rows = args[0]
-  else:
-    target_table_id = table_id
-    rows = kwargs.get("rows", [])
-
-  if not rows:
-    return 0
-
-  table_id = target_table_id
-
-  client.query(
-      f"CREATE TABLE IF NOT EXISTS `{table_id}` "
-      f"AS SELECT * FROM `{table_id}` WHERE FALSE",
-      location=location,
-  ).result()
-  target_table = client.get_table(table_id)
-  schema = target_table.schema
-  columns = [field.name for field in schema]
-  identity = {"repository", "finding_id"}
-  missing_identity = identity.difference(columns)
-  if missing_identity:
-    raise ValueError(
-        "Current-state table is missing key columns: "
-        + ", ".join(sorted(missing_identity))
-    )
-
-  unique_rows = deduplicate_rows_by_key(rows)
-  staged_rows = [
-      {key: value for key, value in row.items() if key in columns}
-      for row in unique_rows
-  ]
-  stage_table_id = f"{table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  try:
-    job_config = bigquery.LoadJobConfig(
-        schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
-    )
-    client.load_table_from_json(
-      staged_rows, stage_table_id, job_config=job_config, location=location
-    ).result()
-
-    columns_sql = ", ".join(f"`{column}`" for column in columns)
-    updates_sql = ", ".join(
-        f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
-    )
-    values_sql = ", ".join(f"S.`{column}`" for column in columns)
-    merge_sql = f"""
-MERGE `{table_id}` AS T
-USING `{stage_table_id}` AS S
-ON T.repository = S.repository AND T.finding_id = S.finding_id
-WHEN MATCHED THEN UPDATE SET {updates_sql}
-WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
-"""
-    client.query(merge_sql, location=location).result()
-    return len(unique_rows)
-  finally:
-    client.delete_table(stage_table_id, not_found_ok=True)
 
 
 def _print_heading(title: str):
@@ -426,29 +283,16 @@ def run_roundtrip(
   final_findings_by_id = {_finding_id(row): row for row in after_findings}
 
   _print_heading("Exporting findings to BigQuery...")
-  findings_for_upload = [
-      _to_telemetry_finding(
-          finding, repo_dir, source_ids_by_cm_id.get(_finding_id(finding))
-      )
-      for finding in after_findings
-      if _finding_id(finding) in ids_to_process
-  ]
-  context = telemetry.ScanRunContext(
-      stage="bigquery_roundtrip",
-      scan_id=str(uuid.uuid4()),
+  merged = export_findings_to_bigquery(
+      client=client,
+      table_id=table_id,
+      findings=after_findings,
       repository=repository,
       repo_dir=repo_dir,
-      skip_verify=False,
-  )
-  finding_rows = telemetry.build_finding_rows(
-      context, findings_for_upload, with_snippets=False
-  )
-  merged = merge_current_findings(
-      client,
-      table_id,
-      table_id,
-      finding_rows,
       location=location,
+      source_ids_by_cm_id=source_ids_by_cm_id,
+      ids_to_process=ids_to_process,
+      merge_fn=merge_current_findings,
   )
   return {
       "source_findings": len(source_rows),
