@@ -104,51 +104,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(len(result), 2)
     self.assertEqual(result[0]["title"], "new")
 
-  def test_imported_ids_keep_source_ids_when_report_order_differs(self):
-    source_rows = [
-        {
-            "repository": "acme/widgets",
-            "finding_id": "finding-a",
-            "file_path": "src/a.py",
-            "start_line": 10,
-            "title": "Finding A",
-            "vuln_type": "SQL Injection",
-        },
-        {
-            "repository": "acme/widgets",
-            "finding_id": "finding-b",
-            "file_path": "src/b.py",
-            "start_line": 20,
-            "title": "Finding B",
-            "vuln_type": "XSS",
-        },
-    ]
-    imported_findings = [
-        {
-            "FindingID": "cm-b",
-            "FilePath": "src/b.py",
-            "StartLine": 20,
-            "Title": "Finding B",
-            "VulnType": "XSS",
-        },
-        {
-            "FindingID": "cm-a",
-            "FilePath": "src/a.py",
-            "StartLine": 10,
-            "Title": "Finding A",
-            "VulnType": "SQL Injection",
-        },
-    ]
-
-    result = roundtrip._match_cm_findings_to_source_rows(
-        source_rows,
-        imported_findings,
-        "/tmp/widgets",
-        required_cm_ids=["cm-a", "cm-b"],
-    )
-
-    self.assertEqual(result, {"cm-a": "finding-a", "cm-b": "finding-b"})
-
   def test_telemetry_mapping_preserves_source_finding_id(self):
     finding = {
         "FindingID": "cm-a",
@@ -177,7 +132,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
         "start_line": 12,
     }
     imported = {
-        "FindingID": "cm-1",
+        "FindingID": "source-finding-id",
         "FilePath": "src/db.py",
         "Title": "SQL injection",
         "VulnType": "SQL Injection",
@@ -199,7 +154,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(
               roundtrip,
               "import_findings",
-              return_value=(["cm-1"], [imported]),
+              return_value=(["source-finding-id"], [imported]),
           ),
           patch.object(roundtrip, "merge_current_findings", return_value=1) as merge,
           patch.object(roundtrip, "ensure_dataset"),

@@ -1,7 +1,7 @@
 """Encapsulates finding data and domain logic across CodeMender BigQuery workflows.
 
 This module provides the `Finding` class, unifying finding representation,
-normalization, fingerprint generation, scoring/matching, and transformations
+normalization, fingerprint generation, and transformations
 between CodeMender CLI formats and BigQuery telemetry formats.
 """
 
@@ -461,79 +461,13 @@ class Finding:
 
   def __eq__(self, other: Any) -> bool:
     if isinstance(other, Finding):
-      return self._raw == other._raw
+      return self.finding_id == other.finding_id
     return False
 
-  # --- Matching & Deduplication Algorithms ---
+  def __hash__(self) -> int:
+    return hash(self.finding_id)
 
-  @staticmethod
-  def match_findings(
-      source_findings: Sequence[Union[Mapping[str, Any], Finding]],
-      cm_findings: Sequence[Union[Mapping[str, Any], Finding]],
-      repo_dir: str,
-      required_cm_ids: Optional[Sequence[str]] = None,
-  ) -> Dict[str, str]:
-    """Maps cm IDs to BigQuery finding IDs using finding attributes."""
-    required = set(required_cm_ids) if required_cm_ids is not None else None
-    sources = [
-        s if isinstance(s, Finding) else Finding.from_dict(s, repo_dir)
-        for s in source_findings
-    ]
-    unmatched = list(sources)
-    source_ids_by_cm_id: Dict[str, str] = {}
-
-    cms = [
-        c if isinstance(c, Finding) else Finding.from_dict(c, repo_dir)
-        for c in cm_findings
-    ]
-    for cm in cms:
-      cm_id = cm.finding_id
-      if not cm_id or (required is not None and cm_id not in required):
-        continue
-
-      candidates: List[Tuple[int, Finding]] = []
-      for source in unmatched:
-        if source.file_path != cm.file_path:
-          continue
-        if (
-            cm.start_line is not None
-            and source.start_line is not None
-            and cm.start_line != source.start_line
-        ):
-          continue
-        score = 0
-        if cm.title and cm.title == source.title:
-          score += 4
-        if cm.vuln_type and cm.vuln_type == source.vuln_type:
-          score += 2
-        if source.snippet and source.snippet == cm.snippet:
-          score += 1
-        candidates.append((score, source))
-
-      if not candidates:
-        if required is not None and cm_id in required:
-          raise ValueError(f"Could not match imported finding {cm_id} to BigQuery source")
-        continue
-
-      best_score = max(score for score, _ in candidates)
-      best = [source for score, source in candidates if score == best_score]
-      if len(best) != 1:
-        if required is not None and cm_id in required:
-          raise ValueError(f"Imported finding {cm_id} ambiguously matches BigQuery rows")
-        continue
-
-      source = best[0]
-      source_ids_by_cm_id[cm_id] = source.finding_id
-      unmatched.remove(source)
-
-    if required is not None:
-      missing = required.difference(source_ids_by_cm_id)
-      if missing:
-        raise ValueError(
-            "CodeMender report omitted imported finding IDs: "
-            + ", ".join(sorted(missing))
-        )
-    return source_ids_by_cm_id
+  # --- Deduplication Algorithms ---
 
   @staticmethod
   def deduplicate(

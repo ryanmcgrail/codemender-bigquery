@@ -176,17 +176,15 @@ class FindingTests(unittest.TestCase):
     self.assertFalse(hasattr(f, "get"))
     self.assertIs(f.to_bq_row(), f.raw)
 
-  def test_match_findings(self):
-    source = [
-        {"finding_id": "bq-1", "file_path": "a.py", "start_line": 10, "title": "SQLi", "vuln_type": "sqli"},
-        {"finding_id": "bq-2", "file_path": "b.py", "start_line": 20, "title": "XSS", "vuln_type": "xss"},
-    ]
-    cm = [
-        {"FindingID": "cm-1", "FilePath": "a.py", "Line": 10, "Title": "SQLi", "VulnType": "sqli"},
-        {"FindingID": "cm-2", "FilePath": "b.py", "Line": 20, "Title": "XSS", "VulnType": "xss"},
-    ]
-    matched = Finding.match_findings(source, cm, repo_dir="/tmp")
-    self.assertEqual(matched, {"cm-1": "bq-1", "cm-2": "bq-2"})
+  def test_finding_equivalence_by_finding_id(self):
+    f1 = Finding(finding_id="f-1", title="Title 1", file_path="a.py")
+    f2 = Finding(finding_id="f-1", title="Different Title", file_path="b.py")
+    f3 = Finding(finding_id="f-2", title="Title 1", file_path="a.py")
+
+    self.assertEqual(f1, f2)
+    self.assertNotEqual(f1, f3)
+    self.assertEqual(hash(f1), hash(f2))
+    self.assertNotEqual(f1, "not-a-finding")
 
   def test_deduplicate(self):
     findings = [

@@ -551,21 +551,6 @@ def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
   return dest_path
 
 
-def _match_cm_findings_to_source_rows(
-    source_rows: Sequence[Any],
-    cm_findings: Sequence[Any],
-    repo_dir: str,
-    required_cm_ids: Optional[Sequence[str]] = None,
-) -> Dict[str, str]:
-  """Maps cm IDs to BigQuery finding IDs using stable finding attributes."""
-  return Finding.match_findings(
-      source_findings=source_rows,
-      cm_findings=cm_findings,
-      repo_dir=repo_dir,
-      required_cm_ids=required_cm_ids,
-  )
-
-
 def run_cm_find(
     cm_binary: str, repo_dir: str, cli_version: Optional[str] = None
 ) -> None:

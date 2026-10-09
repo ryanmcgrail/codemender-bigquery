@@ -122,31 +122,6 @@ class RunCodeMenderFindTests(unittest.TestCase):
       with self.assertRaises(RuntimeError):
         finder.run_cm_find("cm", "/tmp/repo", cli_version="preview")
 
-  def test_match_cm_findings_to_source_rows(self):
-    source_rows = [
-        {
-            "repository": "acme/repo",
-            "finding_id": "bq-1",
-            "file_path": "app.py",
-            "start_line": 20,
-            "title": "XSS",
-            "vuln_type": "Cross-Site Scripting",
-        }
-    ]
-    cm_findings = [
-        {
-            "FindingID": "cm-1",
-            "FilePath": "app.py",
-            "StartLine": 20,
-            "Title": "XSS",
-            "VulnType": "Cross-Site Scripting",
-        }
-    ]
-    matches = finder._match_cm_findings_to_source_rows(
-        source_rows, cm_findings, "/tmp/repo", required_cm_ids=["cm-1"]
-    )
-    self.assertEqual(matches, {"cm-1": "bq-1"})
-
   def test_read_findings(self):
     raw = json.dumps({"findings": [{"FindingID": "cm-99"}]})
     proc = types.SimpleNamespace(returncode=0, stdout=raw)

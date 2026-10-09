@@ -36,7 +36,6 @@ from step_1_import_from_bq import (
     resolve_project,
 )
 from step_2_cm_find import (
-    _match_cm_findings_to_source_rows,
     _run_cm_find,
     import_findings,
     read_findings,
@@ -131,14 +130,12 @@ def run_roundtrip(
   else:
     _run_cm_find(cm_binary, repo_dir, cli_version)
     before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
-    source_ids_by_cm_id = _match_cm_findings_to_source_rows(
-        source_rows, before_findings, repo_dir
-    )
-    already_present_source_ids = set(source_ids_by_cm_id.values())
+    before_ids = {_finding_id(f) for f in before_findings if _finding_id(f)}
+    source_ids_by_cm_id = {fid: fid for fid in before_ids}
     import_rows = [
         row
         for row in source_rows
-        if _row_key(row)[1] not in already_present_source_ids
+        if _finding_id(row) not in before_ids
     ]
     import_records = [build_cm_import_record(row) for row in import_rows]
     post_import_findings = list(before_findings)
@@ -154,9 +151,7 @@ def run_roundtrip(
       imported_ids, post_import_findings = import_findings(
           cm_binary, payload_path, repo_dir, cli_version=cli_version
       )
-    imported_source_ids = _match_cm_findings_to_source_rows(
-        import_rows, post_import_findings, repo_dir, required_cm_ids=imported_ids
-    )
+    imported_source_ids = {fid: fid for fid in imported_ids}
 
   source_ids_by_cm_id.update(imported_source_ids)
   ids_to_process = set(source_ids_by_cm_id)
