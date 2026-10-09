@@ -32,7 +32,6 @@ from step_3_export_to_bq import (
     ScanRunContext,
     build_finding_rows,
     export_findings_to_bigquery,
-    merge_current_findings,
 )
 
 
@@ -106,14 +105,13 @@ def run_roundtrip(
 
   _print_heading("Exporting findings to BigQuery...")
   cm_findings = cm.list_findings()
-  merged = export_findings_to_bigquery(
+  export_findings_to_bigquery(
       client=client,
       table_id=table_id,
       findings=cm_findings,
       repository=repository,
       repo_dir=repo_dir,
       location=location,
-      merge_fn=merge_current_findings,
   )
 
 

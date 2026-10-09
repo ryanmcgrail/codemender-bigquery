@@ -103,14 +103,6 @@ class FindingTests(unittest.TestCase):
     self.assertNotIn("snippet", row_no_snippet)
     self.assertNotIn("analysis", row_no_snippet)
 
-  def test_row_key(self):
-    f = Finding(fingerprint="fp-1", repository="owner/repo")
-    self.assertEqual(f.row_key, ("owner/repo", "fp-1"))
-
-    f_no_repo = Finding(fingerprint="fp-1", repository="")
-    with self.assertRaises(ValueError):
-      _ = f_no_repo.row_key
-
   def test_is_closed_and_verified(self):
     f_open = Finding(finding_id="1", status="DETECTED")
     self.assertFalse(f_open.is_closed())
@@ -151,18 +143,6 @@ class FindingTests(unittest.TestCase):
     self.assertNotEqual(f1, f3)
     self.assertEqual(hash(f1), hash(f2))
     self.assertNotEqual(f1, "not-a-finding")
-
-  def test_deduplicate(self):
-    findings = [
-        {"finding_id": "1", "fingerprint": "fp-1", "repository": "r1", "title": "First"},
-        {"finding_id": "1", "fingerprint": "fp-1", "repository": "r1", "title": "Updated"},
-        {"finding_id": "2", "fingerprint": "fp-2", "repository": "r1", "title": "Other"},
-    ]
-    deduped = Finding.deduplicate(findings)
-    self.assertEqual(len(deduped), 2)
-    by_id = {f.finding_id: f.title for f in deduped}
-    self.assertEqual(by_id["1"], "Updated")
-    self.assertEqual(by_id["2"], "Other")
 
 
 if __name__ == "__main__":

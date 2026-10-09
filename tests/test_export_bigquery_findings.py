@@ -111,21 +111,6 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     self.assertTrue(row["verified"])
     self.assertEqual(row["finding_source"], "codemender")
 
-  def test_merge_current_findings(self):
-    client = _MockClient()
-    rows = [
-        {
-            "repository": "acme/widgets",
-            "finding_id": "f-1",
-            "fingerprint": "fp-1",
-            "scan_id": "s-1",
-            "scan_timestamp": "2026-10-07T00:00:00Z",
-        }
-    ]
-    merged = exporter.merge_current_findings(client, "project.dataset.findings", rows)
-    self.assertEqual(merged, 1)
-    self.assertTrue(client.deleted.startswith("project.dataset._cm_stage_"))
-
   def test_export_findings_to_bigquery(self):
     client = _MockClient()
     findings = [

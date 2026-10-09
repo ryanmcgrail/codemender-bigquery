@@ -6,10 +6,7 @@ from pprint import pprint
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
 import uuid
 
-from step_1_import_from_bq import (
-    _finding_value,
-    deduplicate_rows_by_key,
-)
+from step_1_import_from_bq import _finding_value
 from finding import Finding
 
 logger = logging.getLogger("export-bigquery-findings")
@@ -212,13 +209,27 @@ def _to_telemetry_finding(
   return normalized
 
 
-def merge_current_findings(
+def export_findings_to_bigquery(
     client: Any,
     table_id: str,
-    rows: Iterable[Dict[str, Any]],
+    findings: Iterable[Finding],
+    repository: str,
+    repo_dir: str,
     location: Optional[str] = None,
+    scan_id: Optional[str] = None,
 ) -> int:
-  """MERGEs rows by repository/fingerprint into the findings table."""
+  """Transforms CodeMender findings to telemetry rows and uploads them to BigQuery."""
+  context = ScanRunContext(
+      stage="bigquery_roundtrip",
+      scan_id=scan_id or str(uuid.uuid4()),
+      repository=repository,
+      repo_dir=repo_dir,
+      skip_verify=False,
+  )
+  finding_rows = build_finding_rows(context, findings)
+  if not finding_rows:
+    return 0
+
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
   try:
@@ -262,71 +273,12 @@ def merge_current_findings(
       pass
 
   columns = [field.name for field in schema]
-  identity = {"repository", "fingerprint"}
-  missing_identity = identity.difference(columns)
-  if missing_identity:
-    raise ValueError(
-        "Findings table is missing key columns: "
-        + ", ".join(sorted(missing_identity))
-    )
-
-  unique_rows = deduplicate_rows_by_key(rows)
-  staged_rows = [
+  rows_to_load = [
       {key: value for key, value in row.items() if key in columns}
-      for row in unique_rows
+      for row in finding_rows
   ]
-  stage_table_id = f"{table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
-  from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-  try:
-    job_config = bigquery.LoadJobConfig(
-        schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
-    )
-    client.load_table_from_json(
-        staged_rows, stage_table_id, job_config=job_config, location=location
-    ).result()
-
-    columns_sql = ", ".join(f"`{column}`" for column in columns)
-    updates_sql = ", ".join(
-        f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
-    )
-    values_sql = ", ".join(f"S.`{column}`" for column in columns)
-    merge_sql = f"""
-MERGE `{table_id}` AS T
-USING `{stage_table_id}` AS S
-ON T.repository = S.repository AND T.fingerprint = S.fingerprint
-WHEN MATCHED THEN UPDATE SET {updates_sql}
-WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
-"""
-    client.query(merge_sql, location=location).result()
-    return len(unique_rows)
-  finally:
-    client.delete_table(stage_table_id, not_found_ok=True)
-
-
-def export_findings_to_bigquery(
-    client: Any,
-    table_id: str,
-    findings: Iterable[Finding],
-    repository: str,
-    repo_dir: str,
-    location: Optional[str] = None,
-    scan_id: Optional[str] = None,
-    merge_fn: Optional[Any] = None,
-) -> int:
-  """Transforms CodeMender findings to telemetry rows and merges them into BigQuery."""
-  context = ScanRunContext(
-      stage="bigquery_roundtrip",
-      scan_id=scan_id or str(uuid.uuid4()),
-      repository=repository,
-      repo_dir=repo_dir,
-      skip_verify=False,
-  )
-  finding_rows = build_finding_rows(context, findings)
-  merge = merge_fn or merge_current_findings
-  return merge(
-      client,
-      table_id,
-      finding_rows,
-      location=location,
-  )
+  job_config = bigquery.LoadJobConfig(schema=schema)
+  client.load_table_from_json(
+      rows_to_load, table_id, job_config=job_config, location=location
+  ).result()
+  return len(rows_to_load)

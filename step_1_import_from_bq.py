@@ -96,33 +96,6 @@ def _int_or_none(value: Any) -> Optional[int]:
     return None
 
 
-def _row_key(row: Any) -> Tuple[str, str]:
-  if isinstance(row, Finding):
-    return row.row_key
-  repository = _text(row, "repository")
-  fingerprint = _text(row, "fingerprint")
-  if not repository or not fingerprint:
-    raise ValueError("A unique finding must have repository and fingerprint")
-  return repository, fingerprint
-
-
-def deduplicate_rows_by_key(
-    rows: Iterable[Any],
-) -> List[Dict[str, Any]]:
-  """Keeps the last row for each (repository, fingerprint) pair."""
-  keyed: Dict[Tuple[str, str], Dict[str, Any]] = {}
-  for row in rows:
-    if isinstance(row, Finding):
-      keyed[row.row_key] = row.to_bq_row()
-    elif isinstance(row, dict):
-      keyed[_row_key(row)] = dict(row)
-    elif hasattr(row, "items"):
-      keyed[_row_key(row)] = dict(row.items())
-    else:
-      keyed[_row_key(row)] = dict(row)
-  return list(keyed.values())
-
-
 def _finding_value(finding: Any, snake: str, pascal: str) -> Any:
   if isinstance(finding, Finding):
     val = getattr(finding, snake, None)
@@ -159,22 +132,16 @@ def build_cm_import_record(row: Any) -> Dict[str, Any]:
 
 
 def _latest_findings_query(table_id: str) -> str:
-  """Constructs the parameterized BigQuery query to fetch the latest actionable findings."""
+  """Constructs the parameterized BigQuery query to fetch actionable findings."""
   return f"""
-SELECT * FROM (
-  SELECT *
-  FROM `{table_id}`
-  WHERE repository = @repository
-    AND NULLIF(TRIM(fingerprint), '') IS NOT NULL
-    AND NULLIF(TRIM(file_path), '') IS NOT NULL
-  QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY repository, fingerprint
-    ORDER BY scan_timestamp DESC, scan_id DESC
-  ) = 1
-)
-WHERE UPPER(COALESCE(status, '')) NOT IN (
-  'FIXED', 'REMEDIATED', 'PATCHED', 'DISMISSED', 'FALSE_POSITIVE', 'RESOLVED'
-)
+SELECT *
+FROM `{table_id}`
+WHERE repository = @repository
+  AND NULLIF(TRIM(fingerprint), '') IS NOT NULL
+  AND NULLIF(TRIM(file_path), '') IS NOT NULL
+  AND UPPER(COALESCE(status, '')) NOT IN (
+    'FIXED', 'REMEDIATED', 'PATCHED', 'DISMISSED', 'FALSE_POSITIVE', 'RESOLVED'
+  )
 """
 
 

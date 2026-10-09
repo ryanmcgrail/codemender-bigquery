@@ -276,13 +276,6 @@ class Finding:
   def updated_at(self) -> Optional[str]:
     return _as_str(self._get("updated_at", "UpdatedAt"))
 
-  @property
-  def row_key(self) -> Tuple[str, str]:
-    """Returns composite primary key (repository, fingerprint)."""
-    if not self.repository or not self.fingerprint:
-      raise ValueError("A unique finding must have repository and fingerprint")
-    return self.repository, self.fingerprint
-
   # --- Factory Methods ---
 
   @classmethod
@@ -440,19 +433,6 @@ class Finding:
 
   def __hash__(self) -> int:
     return hash(self.finding_id)
-
-  # --- Deduplication Algorithms ---
-
-  @staticmethod
-  def deduplicate(
-      findings: Iterable[Union[Mapping[str, Any], Finding]],
-  ) -> List[Finding]:
-    """Deduplicates findings by (repository, fingerprint), keeping the last."""
-    keyed: Dict[Tuple[str, str], Finding] = {}
-    for item in findings:
-      finding = item if isinstance(item, Finding) else Finding.from_dict(item)
-      keyed[finding.row_key] = finding
-    return list(keyed.values())
 
 
 Findings = Finding

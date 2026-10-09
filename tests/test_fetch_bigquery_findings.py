@@ -20,20 +20,8 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     query = fetcher._latest_findings_query("proj.ds.tbl")
     self.assertIn("FROM `proj.ds.tbl`", query)
     self.assertIn("WHERE repository = @repository", query)
-    self.assertIn("PARTITION BY repository, fingerprint", query)
-    self.assertIn("QUALIFY ROW_NUMBER() OVER", query)
-    self.assertIn("ORDER BY scan_timestamp DESC, scan_id DESC", query)
-
-  def test_deduplicate_rows_by_key(self):
-    rows = [
-        {"repository": "acme/repo", "fingerprint": "1", "title": "Old"},
-        {"repository": "acme/repo", "fingerprint": "1", "title": "New"},
-        {"repository": "acme/repo", "fingerprint": "2", "title": "Other"},
-    ]
-    deduped = fetcher.deduplicate_rows_by_key(rows)
-    self.assertEqual(len(deduped), 2)
-    self.assertEqual(deduped[0]["title"], "New")
-    self.assertEqual(deduped[1]["title"], "Other")
+    self.assertNotIn("PARTITION BY", query)
+    self.assertNotIn("QUALIFY ROW_NUMBER()", query)
 
   def test_build_cm_import_record(self):
     row = {
