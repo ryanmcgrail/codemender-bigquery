@@ -125,10 +125,9 @@ class ScanRunContext:
 
 def build_finding_rows(
     ctx: ScanRunContext,
-    findings: Optional[Iterable[Dict[str, Any]]],
+    findings: Iterable[Finding],
     scan_timestamp: Optional[str] = None,
     finding_prs: Optional[Dict[str, str]] = None,
-    with_snippets: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
   if not findings:
@@ -158,7 +157,6 @@ def build_finding_rows(
     ) or _as_str(finding.get("confidence"))
 
     row: Dict[str, Any] = {
-        "finding_id": finding_id,
         "scan_id": scan_id,
         "scan_timestamp": timestamp,
         "repository": repository,
@@ -191,7 +189,6 @@ def build_finding_rows(
 
 def _to_telemetry_finding(
     finding: Union[Finding],
-    source_finding_id: Optional[str] = None,
 ) -> Dict[str, Any]:
   """Maps canonical or snake_case cm report output to the telemetry mapper."""
   field_names = (
@@ -201,7 +198,6 @@ def _to_telemetry_finding(
       "dismiss_reason", "updated_at",
   )
   normalized = {
-      "finding_id": finding.finding_id,
       "fingerprint": finding.fingerprint,
   }
   aliases = {
@@ -213,46 +209,16 @@ def _to_telemetry_finding(
     value = _finding_value(finding, field, pascal)
     if value is not None:
       normalized[field] = value
-  if source_finding_id:
-    normalized["finding_id"] = source_finding_id
   return normalized
 
 
 def merge_current_findings(
     client: Any,
     table_id: str,
-    *args: Any,
+    rows: Iterable[Dict[str, Any]],
     location: Optional[str] = None,
-    **kwargs: Any,
 ) -> int:
   """MERGEs rows by repository/fingerprint into the findings table."""
-  if len(args) >= 2:
-    source_table_id = table_id
-    target_table_id = str(args[0])
-    rows = args[1]
-    if len(args) >= 3 and location is None:
-      location = args[2]
-  elif len(args) == 1:
-    source_table_id = table_id
-    target_table_id = table_id
-    rows = args[0]
-  else:
-    source_table_id = table_id
-    target_table_id = table_id
-    rows = kwargs.get("rows", [])
-
-  if not rows:
-    return 0
-
-  table_id = target_table_id
-
-  if source_table_id != target_table_id:
-    client.query(
-        f"CREATE TABLE IF NOT EXISTS `{target_table_id}` "
-        f"AS SELECT * FROM `{source_table_id}` WHERE FALSE",
-        location=location,
-    ).result()
-
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
   try:
@@ -345,26 +311,10 @@ def export_findings_to_bigquery(
     repository: str,
     repo_dir: str,
     location: Optional[str] = None,
-    source_ids_by_cm_id: Optional[Mapping[str, str]] = None,
-    ids_to_process: Optional[Iterable[str]] = None,
     scan_id: Optional[str] = None,
-    with_snippets: bool = False,
     merge_fn: Optional[Any] = None,
 ) -> int:
   """Transforms CodeMender findings to telemetry rows and merges them into BigQuery."""
-  source_ids = source_ids_by_cm_id or {}
-  allowed_ids = set(ids_to_process) if ids_to_process is not None else None
-
-  findings_for_upload = [
-      _to_telemetry_finding(
-          finding, source_ids.get(finding.finding_id)
-      )
-      for finding in findings
-      if allowed_ids is None or finding.finding_id in allowed_ids
-  ]
-
-  pprint(findings_for_upload, indent=2)
-
   context = ScanRunContext(
       stage="bigquery_roundtrip",
       scan_id=scan_id or str(uuid.uuid4()),
@@ -372,13 +322,10 @@ def export_findings_to_bigquery(
       repo_dir=repo_dir,
       skip_verify=False,
   )
-  finding_rows = build_finding_rows(
-      context, findings_for_upload, with_snippets=with_snippets
-  )
+  finding_rows = build_finding_rows(context, findings)
   merge = merge_fn or merge_current_findings
   return merge(
       client,
-      table_id,
       table_id,
       finding_rows,
       location=location,

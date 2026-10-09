@@ -66,7 +66,7 @@ def run_roundtrip(
     cli_version: Optional[str] = None,
     location: Optional[str] = None,
     client: Any = None,
-) -> Dict[str, int]:
+):
   """Runs the BigQuery -> cm import/verify/fix -> BigQuery round trip."""
   if not os.path.isdir(repo_dir):
     raise ValueError(f"Repository directory does not exist: {repo_dir}")
@@ -102,41 +102,19 @@ def run_roundtrip(
 
   _print_heading("Running CodeMender find on repository...")
 
-  before_find_findings = cm.list_findings()
-  before_ids = {f.finding_id for f in before_find_findings}
   cm.find('routes/login.ts')
-  after_find_findings = cm.list_findings()
-  new_findings = [
-      finding
-      for finding in after_find_findings
-      if finding.finding_id not in before_ids
-  ]
-  source_ids_by_cm_id = {
-      finding.finding_id: finding.finding_id
-      for finding in new_findings
-  }
-  scanned_findings = len(new_findings)
-  ids_to_process = set(source_ids_by_cm_id)
 
   _print_heading("Exporting findings to BigQuery...")
+  cm_findings = cm.list_findings()
   merged = export_findings_to_bigquery(
       client=client,
       table_id=table_id,
-      findings=after_find_findings,
+      findings=cm_findings,
       repository=repository,
       repo_dir=repo_dir,
       location=location,
-      source_ids_by_cm_id=source_ids_by_cm_id,
-      ids_to_process=ids_to_process,
       merge_fn=merge_current_findings,
   )
-  return {
-      "source_findings": len(bq_findings),
-      "scanned_findings": scanned_findings,
-      "already_in_code_mender": len(bq_findings) - len(imported_ids),
-      "imported": len(imported_ids),
-      "merged": merged,
-  }
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -175,7 +153,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   except Exception as error:  # pylint: disable=broad-exception-caught
     logger.error("BigQuery CodeMender round-trip failed: %s", error)
     return 1
-  print(json.dumps(summary, indent=2))
   return 0
 
 
