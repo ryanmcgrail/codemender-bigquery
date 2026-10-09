@@ -13,7 +13,6 @@ from step_1_import_from_bq import (
     _finding_value,
     _int_or_none,
     deduplicate_rows_by_key,
-    normalize_repo_relative_path,
 )
 from finding import Finding
 
@@ -79,20 +78,9 @@ def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
   return None
 
 
-def _repo_relative_path(raw_path: Any, repo_dir: Optional[str]) -> Optional[str]:
-  """Coerces a finding's file path to a repository-relative path."""
-  text = _as_str(raw_path)
-  if text is None:
-    return None
-  try:
-    normalized = normalize_repo_relative_path(text, repo_dir)
-  except Exception:
-    return text
-  if not normalized:
-    return text
-  if text.startswith("/") and normalized == text.lstrip("/"):
-    return text
-  return _REPEATED_SLASHES.sub("/", normalized)
+def _repo_relative_path(raw_path: Any, repo_dir: Optional[str] = None) -> Optional[str]:
+  """Returns a finding's file path as-is."""
+  return _as_str(raw_path)
 
 
 def _row_verified(

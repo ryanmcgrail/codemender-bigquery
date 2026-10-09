@@ -121,34 +121,6 @@ def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
   return None
 
 
-def normalize_repo_relative_path(path: str, repo_dir: Optional[str] = None) -> str:
-  """Normalizes a file path to be strictly repository-relative with forward slashes."""
-  if not path:
-    return ""
-  p = str(path).strip().replace("\\", "/")
-  if repo_dir:
-    clean_repo_dir = os.path.abspath(repo_dir).replace("\\", "/")
-    if p == clean_repo_dir:
-      return ""
-    if p.startswith(clean_repo_dir + "/"):
-      p = p[len(clean_repo_dir) + 1 :]
-    elif os.path.isabs(p):
-      try:
-        rel = os.path.relpath(p, clean_repo_dir).replace("\\", "/")
-        if not rel.startswith("../") and rel != "..":
-          p = rel
-      except ValueError:
-        pass
-
-  # Strip leading CI runner mount patterns if present
-  p = re.sub(r"^/?__w/[^/]+/[^/]+(?:/[^/]+)?/", "", p)
-  p = re.sub(r"^/?github/workspace/", "", p)
-  # Strip any leading slashes, dots, or relative traversal markers
-  p = re.sub(r"^(\.\./)+", "", p)
-  p = re.sub(r"^\.?/+", "", p)
-  return p
-
-
 # --- Main Finding Class ---
 
 
@@ -165,12 +137,6 @@ class Finding:
       self._raw.update(dict(raw.items()) if hasattr(raw, "items") else dict(raw))
     if kwargs:
       self._raw.update(kwargs)
-
-    # Normalize file_path in raw if present
-    if "file_path" in self._raw and self._raw["file_path"]:
-      self._raw["file_path"] = normalize_repo_relative_path(str(self._raw["file_path"]))
-    elif "FilePath" in self._raw and self._raw["FilePath"]:
-      self._raw["FilePath"] = normalize_repo_relative_path(str(self._raw["FilePath"]))
 
   def _get(self, *keys: str) -> Any:
     for k in keys:
@@ -202,7 +168,7 @@ class Finding:
     val = self._get("file_path", "FilePath", "path")
     if not val:
       return ""
-    return normalize_repo_relative_path(str(val))
+    return str(val)
 
   @property
   def start_line(self) -> Optional[int]:
@@ -338,14 +304,6 @@ class Finding:
       return data
 
     raw: Dict[str, Any] = dict(data.items()) if hasattr(data, "items") else dict(data)
-    if repo_dir:
-      raw_path = raw.get("file_path") or raw.get("FilePath") or raw.get("path")
-      if raw_path:
-        norm = normalize_repo_relative_path(str(raw_path), repo_dir)
-        if "file_path" in raw:
-          raw["file_path"] = norm
-        elif "FilePath" in raw:
-          raw["FilePath"] = norm
     return cls(raw)
 
   @classmethod
@@ -496,8 +454,6 @@ class Finding:
     d = self.to_dict()
     if source_finding_id:
       d["finding_id"] = source_finding_id
-    if repo_dir:
-      d["file_path"] = normalize_repo_relative_path(self.file_path, repo_dir)
     return d
 
   def __repr__(self) -> str:

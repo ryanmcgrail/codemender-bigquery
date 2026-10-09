@@ -5,7 +5,6 @@ import unittest
 from finding import (
     Finding,
     extract_cwe_id,
-    normalize_repo_relative_path,
 )
 
 
@@ -16,22 +15,6 @@ class FindingTests(unittest.TestCase):
     self.assertEqual(extract_cwe_id("Insecure code", "cwe-89"), "CWE-89")
     self.assertIsNone(extract_cwe_id("no cwe here"))
     self.assertIsNone(extract_cwe_id(None, ""))
-
-  def test_normalize_repo_relative_path(self):
-    self.assertEqual(normalize_repo_relative_path("src/index.js"), "src/index.js")
-    self.assertEqual(normalize_repo_relative_path("./src/index.js"), "src/index.js")
-    self.assertEqual(
-        normalize_repo_relative_path("/app/src/index.js", repo_dir="/app"),
-        "src/index.js",
-    )
-    self.assertEqual(
-        normalize_repo_relative_path("github/workspace/src/index.js"),
-        "src/index.js",
-    )
-    self.assertEqual(
-        normalize_repo_relative_path("__w/owner/repo/index.js"),
-        "index.js",
-    )
 
   def test_from_dict_and_to_dict(self):
     data = {

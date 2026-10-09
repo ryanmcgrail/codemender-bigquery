@@ -54,20 +54,6 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     self.assertEqual(record["end_line"], 12)
     self.assertEqual(record["snippet"], "db.execute(q)")
 
-  def test_normalize_repo_relative_path(self):
-    self.assertEqual(
-        fetcher.normalize_repo_relative_path("/work/repo/src/a.ts", "/work/repo"),
-        "src/a.ts",
-    )
-    self.assertEqual(
-        fetcher.normalize_repo_relative_path("src/a.ts", "/work/repo"),
-        "src/a.ts",
-    )
-    self.assertEqual(
-        fetcher.normalize_repo_relative_path("/github/workspace/src/a.ts"),
-        "src/a.ts",
-    )
-
   def test_fetch_latest_findings_success(self):
     client = MagicMock()
     mock_job = MagicMock()

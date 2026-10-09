@@ -53,11 +53,11 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
   def test_repo_relative_path(self):
     self.assertEqual(
         exporter._repo_relative_path("/work/repo/src/app.py", "/work/repo"),
-        "src/app.py",
+        "/work/repo/src/app.py",
     )
     self.assertEqual(
         exporter._repo_relative_path("src//app.py", "/work/repo"),
-        "src/app.py",
+        "src//app.py",
     )
     self.assertIsNone(exporter._repo_relative_path(None, "/work/repo"))
 
