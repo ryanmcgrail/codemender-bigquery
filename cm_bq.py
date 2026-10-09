@@ -16,27 +16,17 @@ import os
 from pprint import pprint
 import shutil
 import sys
-import tempfile
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
-from finding import Finding
 from codemender import CodeMender
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _resolve_project,
     _table_id,
-    build_cm_import_record,
     ensure_dataset,
     fetch_findings_from_bigquery,
     resolve_dataset,
     resolve_project,
-)
-
-from step_2_cm_find import (
-    _run_cm_find,
-    import_findings,
-    fetch_findings_from_cm_report,
-    write_import_payload,
 )
 from step_3_export_to_bq import (
     ScanRunContext,
@@ -90,7 +80,7 @@ def run_roundtrip(
     client = bigquery.Client(project=project)
 
   cm_binary = cm_binary or shutil.which("cm") or "cm",
-  codemender = CodeMender(
+  cm = CodeMender(
     cm_binary = cm_binary,
     repo_dir = repo_dir,
     cli_version = cli_version
@@ -98,76 +88,36 @@ def run_roundtrip(
 
   _print_heading("Fetching latest findings from BigQuery...")
   ensure_dataset(client, project, dataset, location)
-  source_rows = fetch_findings_from_bigquery(
+  bq_findings = fetch_findings_from_bigquery(
       client, table_id, repository, location=location
   )
+  imported_ids, after_find_findings = cm.import_findings(bq_findings)
 
-  print("Previous findings:")
-  pprint(source_rows, indent = 2)
+  print("BigQuery findings:")
+  pprint(bq_findings, indent = 2)
 
   _print_heading("Running CodeMender find on repository...")
-  scanned_findings = 0
-  scan_only = not source_rows
-  if not source_rows:
-    before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
-    before_ids = {finding.finding_id for finding in before_findings}
-    _run_cm_find(cm_binary, repo_dir, cli_version)
-    post_import_findings = fetch_findings_from_cm_report(
-        cm_binary, repo_dir, cli_version=cli_version
-    )
-    new_findings = [
-        finding
-        for finding in post_import_findings
-        if finding.finding_id not in before_ids
-    ]
-    candidate_findings = new_findings if new_findings else post_import_findings
-    source_ids_by_cm_id = {
-        finding.finding_id: finding.finding_id
-        for finding in candidate_findings
-    }
-    import_rows: List[Mapping[str, Any]] = []
-    import_records: List[Dict[str, Any]] = []
-    scanned_findings = len(candidate_findings)
-  else:
-    #_run_cm_find(cm_binary, repo_dir, cli_version)
-    before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
-    before_ids = {f.finding_id for f in before_findings}
-    source_ids_by_cm_id = {fid: fid for fid in before_ids}
-    import_rows = [
-        row
-        for row in source_rows
-        if row.finding_id not in before_ids
-    ]
-    import_records = [build_cm_import_record(row) for row in import_rows]
-    post_import_findings = list(before_findings)
-    scanned_findings = len(before_findings)
-
-  imported_ids: List[str] = []
-  imported_source_ids: Dict[str, str] = {}
-  if import_records:
-    with tempfile.TemporaryDirectory(prefix="cm-bq-roundtrip-") as temp_dir:
-      payload_path = write_import_payload(
-          import_records, os.path.join(temp_dir, "bigquery_findings.json")
-      )
-      imported_ids, post_import_findings = import_findings(
-          cm_binary, payload_path, repo_dir, cli_version=cli_version
-      )
-    imported_source_ids = {fid: fid for fid in imported_ids}
-
-  source_ids_by_cm_id.update(imported_source_ids)
+  before_find_findings = cm.list_findings()
+  before_ids = {f.finding_id for f in before_find_findings}
+  cm.find()
+  after_find_findings = cm.list_findings()
+  new_findings = [
+      finding
+      for finding in after_find_findings
+      if finding.finding_id not in before_ids
+  ]
+  source_ids_by_cm_id = {
+      finding.finding_id: finding.finding_id
+      for finding in new_findings
+  }
+  scanned_findings = len(new_findings)
   ids_to_process = set(source_ids_by_cm_id)
-
-  after_findings = (
-      list(post_import_findings)
-      if scan_only
-      else fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
-  )
 
   _print_heading("Exporting findings to BigQuery...")
   merged = export_findings_to_bigquery(
       client=client,
       table_id=table_id,
-      findings=after_findings,
+      findings=after_find_findings,
       repository=repository,
       repo_dir=repo_dir,
       location=location,
@@ -176,10 +126,9 @@ def run_roundtrip(
       merge_fn=merge_current_findings,
   )
   return {
-      "source_findings": len(source_rows),
+      "source_findings": len(bq_findings),
       "scanned_findings": scanned_findings,
-      "already_in_code_mender": len(source_rows) - len(import_rows),
-      "to_import": len(import_records),
+      "already_in_code_mender": len(bq_findings) - len(imported_ids),
       "imported": len(imported_ids),
       "merged": merged,
   }

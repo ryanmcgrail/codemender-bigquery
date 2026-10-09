@@ -43,7 +43,7 @@ class CodeMender:
       raise RuntimeError(f"cm find failed with exit code {returncode}")
     return result
 
-  def fetch_findings_from_report(
+  def list_findings(
       self,
   ) -> List[Finding]:
     """Returns every finding currently in CodeMender state for this repo."""
@@ -56,22 +56,13 @@ class CodeMender:
 
   def import_findings(
       self,
-      import_file: str,
+      findings: Sequence[Finding],
   ) -> Tuple[List[str], List[Finding]]:
     """Imports findings from a file into CodeMender."""
     return finder.import_findings(
         self.cm_binary,
-        import_file,
+        findings,
         self.repo_dir,
         env=self.env,
         cli_version=self.cli_version,
     )
-
-
-def run_cm_find(
-    cm_binary: str, repo_dir: str, cli_version: Optional[str] = None
-) -> None:
-  """Runs the CodeMender find command on the target repository directory."""
-  cm = CodeMender(cm_binary=cm_binary, repo_dir=repo_dir, cli_version=cli_version)
-  cm.find()
-

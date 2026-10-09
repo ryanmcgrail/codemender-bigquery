@@ -78,7 +78,7 @@ class CodeMenderTests(unittest.TestCase):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo", cli_version="preview")
     mock_findings = [Finding(finding_id="f-1", title="Issue 1")]
     with patch("codemender.finder.fetch_findings_from_cm_report", return_value=mock_findings) as mock_report:
-      res = cm.fetch_findings_from_report()
+      res = cm.list_findings()
       self.assertEqual(res, mock_findings)
       mock_report.assert_called_once_with(
           "cm", "/tmp/test_repo", env=None, cli_version="preview"
