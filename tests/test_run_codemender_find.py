@@ -126,7 +126,7 @@ class RunCodeMenderFindTests(unittest.TestCase):
     raw = json.dumps({"findings": [{"FindingID": "cm-99"}]})
     proc = types.SimpleNamespace(returncode=0, stdout=raw)
     with patch.object(finder, "run_command", return_value=proc):
-      findings = finder.read_findings("cm", "/tmp/repo")
+      findings = finder.fetch_findings_from_cm_report("cm", "/tmp/repo")
     self.assertEqual(len(findings), 1)
     self.assertEqual(findings[0].finding_id, "cm-99")
     with self.assertRaises(TypeError):

@@ -374,68 +374,6 @@ _FINDING_KEY_ALIASES = {
 }
 
 
-def extract_json_from_output(raw_str: Optional[str]) -> Optional[Any]:
-  """Extracts and parses the first JSON object or array from a string."""
-  if not raw_str:
-    return None
-  clean = raw_str.strip()
-  if not clean:
-    return None
-
-  start_idx = -1
-  for i, ch in enumerate(clean):
-    if ch in ("{", "["):
-      start_idx = i
-      break
-
-  if start_idx == -1:
-    return None
-
-  try:
-    decoder = json.JSONDecoder()
-    data, _ = decoder.raw_decode(clean, start_idx)
-    return data
-  except (json.JSONDecodeError, ValueError):
-    return None
-
-
-def _parse_findings_json(
-    json_str: str, repo_dir: Optional[str] = None
-) -> List[Finding]:
-  """Parses `cm report --format json` output into Finding instances."""
-  data = extract_json_from_output(json_str)
-  if data is None:
-    logger.error("No valid JSON array or object found in report.")
-    return []
-
-  if isinstance(data, dict):
-    findings = data.get("findings", data.get("items", []))
-  elif isinstance(data, list):
-    findings = data
-  else:
-    findings = []
-
-  parsed_findings: List[Finding] = []
-  for item in findings:
-    if not isinstance(item, dict):
-      continue
-    cleaned: Dict[str, Any] = {}
-    for k, v in item.items():
-      if v == "":
-        cleaned[k] = None
-      else:
-        cleaned[k] = v
-      canonical = _FINDING_KEY_ALIASES.get(k)
-      if canonical and canonical not in item:
-        cleaned[canonical] = cleaned[k]
-    parsed_findings.append(Finding.from_cm_json(cleaned, repo_dir=repo_dir))
-
-  return parsed_findings
-
-
-parse_findings_json = _parse_findings_json
-
-
 class FindingImportError(RuntimeError):
   """Raised when the import round-trip cannot establish the assigned IDs."""
 
@@ -452,7 +390,7 @@ IMPORTED_FINDING_FIELDS = (
 )
 
 
-def read_findings(
+def fetch_findings_from_cm_report(
     cm_binary: str,
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
@@ -476,13 +414,12 @@ def read_findings(
     raise FindingImportError(
         f"'cm report --format json' exited {res.returncode}"
     )
+
   if (res.stdout or "").strip() == "null":
     return []
-  if extract_json_from_output(res.stdout) is None:
-    raise FindingImportError(
-        "'cm report --format json' exited 0 but wrote no parseable JSON"
-    )
-  return _parse_findings_json(res.stdout, repo_dir=repo_dir)
+
+  json_findings = json.JSONDecoder().decode(res.stdout);
+  return [Finding.from_cm_json(json_finding) for json_finding in json_findings]
 
 
 def _ids(findings: Sequence[Any]) -> List[str]:
@@ -510,7 +447,7 @@ def import_findings(
   if not os.path.isfile(import_file):
     raise FindingImportError("import payload file does not exist")
 
-  before = set(_ids(read_findings(cm_binary, repo_dir, env, cli_version)))
+  before = set(_ids(fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)))
 
   import_cmd = build_cm_command(
       cm_binary,
@@ -524,7 +461,7 @@ def import_findings(
         f"'cm report import' exited {import_res.returncode}"
     )
 
-  after_findings = read_findings(cm_binary, repo_dir, env, cli_version)
+  after_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)
   assigned = [fid for fid in _ids(after_findings) if fid not in before]
   if not assigned:
     raise FindingImportError(

@@ -15,7 +15,6 @@ import logging
 import os
 from pprint import pprint
 import shutil
-import subprocess
 import sys
 import tempfile
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -24,12 +23,9 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _finding_id,
-    _latest_findings_query,
     _resolve_project,
-    _row_key,
     _table_id,
     build_cm_import_record,
-    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_latest_findings,
     resolve_dataset,
@@ -38,12 +34,11 @@ from step_1_import_from_bq import (
 from step_2_cm_find import (
     _run_cm_find,
     import_findings,
-    read_findings,
+    fetch_findings_from_cm_report,
     write_import_payload,
 )
 from step_3_export_to_bq import (
     ScanRunContext,
-    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,
@@ -107,10 +102,10 @@ def run_roundtrip(
   scanned_findings = 0
   scan_only = not source_rows
   if not source_rows:
-    before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+    before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
     before_ids = {_finding_id(finding) for finding in before_findings}
     _run_cm_find(cm_binary, repo_dir, cli_version)
-    post_import_findings = read_findings(
+    post_import_findings = fetch_findings_from_cm_report(
         cm_binary, repo_dir, cli_version=cli_version
     )
     new_findings = [
@@ -129,7 +124,7 @@ def run_roundtrip(
     scanned_findings = len(candidate_findings)
   else:
     _run_cm_find(cm_binary, repo_dir, cli_version)
-    before_findings = read_findings(cm_binary, repo_dir, cli_version=cli_version)
+    before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
     before_ids = {_finding_id(f) for f in before_findings if _finding_id(f)}
     source_ids_by_cm_id = {fid: fid for fid in before_ids}
     import_rows = [
@@ -159,7 +154,7 @@ def run_roundtrip(
   after_findings = (
       list(post_import_findings)
       if scan_only
-      else read_findings(cm_binary, repo_dir, cli_version=cli_version)
+      else fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
   )
 
   _print_heading("Exporting findings to BigQuery...")

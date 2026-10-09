@@ -296,29 +296,11 @@ class Finding:
   @classmethod
   def from_dict(
       cls,
-      data: Union[Mapping[str, Any], Finding],
-      repo_dir: Optional[str] = None,
+      data: Mapping[str, Any],
   ) -> Finding:
-    """Creates a Finding instance from any dictionary or Finding object."""
-    if isinstance(data, Finding):
-      return data
-
+    """Creates a Finding instance from a dictionary."""
     raw: Dict[str, Any] = dict(data.items()) if hasattr(data, "items") else dict(data)
     return cls(raw)
-
-  @classmethod
-  def from_bq_row(
-      cls, row: Mapping[str, Any], repo_dir: Optional[str] = None
-  ) -> Finding:
-    """Explicit factory for findings fetched from BigQuery."""
-    return cls.from_dict(row, repo_dir=repo_dir)
-
-  @classmethod
-  def from_cm_json(
-      cls, item: Mapping[str, Any], repo_dir: Optional[str] = None
-  ) -> Finding:
-    """Explicit factory for findings produced by CodeMender CLI."""
-    return cls.from_dict(item, repo_dir=repo_dir)
 
   # --- Domain Methods ---
 
