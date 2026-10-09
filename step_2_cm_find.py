@@ -26,23 +26,6 @@ def is_ci_gate_exit(returncode: int, find_stdout: str) -> bool:
   )
 
 
-def parse_token_metric(token_str: str) -> int:
-  """Converts human-readable token metric strings with SI suffixes into integers."""
-  token_str = token_str.strip()
-  if not token_str:
-    raise ValueError("Empty token metric string.")
-  unit_multipliers = {
-      "k": 1000,
-      "m": 1000000,
-      "g": 1000000000,
-  }
-  last_char = token_str[-1].lower()
-  if last_char in unit_multipliers:
-    val = float(token_str[:-1])
-    return int(val * unit_multipliers[last_char])
-  return int(float(token_str))
-
-
 _HELP_FLAG_LINE = re.compile(
     r"^\s*(?:-(?P<short>[A-Za-z0-9]),\s+)?--(?P<long>[A-Za-z0-9][\w-]*)"
     r"(?P<value> (?![ -])\S+)?"
@@ -410,41 +393,3 @@ def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
   with open(dest_path, "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)
   return dest_path
-
-
-def run_cm_find(
-    cm_binary: str, repo_dir: str, cli_version: Optional[str] = None
-) -> None:
-  """Runs the CodeMender find command on the target repository directory."""
-  command = build_cm_command(
-      cm_binary, "find", target_or_id=repo_dir, cli_version=cli_version
-  )
-  result = run_command(command, cwd=repo_dir, check=False, print_to_stdout=True)
-  returncode = getattr(result, "returncode", 0)
-  stdout = getattr(result, "stdout", "")
-  if returncode and not is_ci_gate_exit(returncode, stdout or ""):
-    raise RuntimeError(f"cm find failed with exit code {returncode}")
-
-
-_run_cm_find = run_cm_find
-
-
-def run_cm_action(
-    action: str,
-    finding_id: str,
-    cm_binary: str,
-    repo_dir: str,
-    cli_version: Optional[str] = None,
-) -> int:
-  """Runs an arbitrary CodeMender action (verify, fix, etc.) on a finding ID."""
-  command = build_cm_command(
-      cm_binary, action, target_or_id=finding_id, cli_version=cli_version
-  )
-  result = run_command(command, cwd=repo_dir, check=False)
-  returncode = getattr(result, "returncode", 0)
-  if returncode != 0:
-    logger.warning("cm %s failed for finding %s (exit %s).", action, finding_id, returncode)
-  return returncode
-
-
-_run_cm_action = run_cm_action

@@ -4,7 +4,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from codemender import CodeMender, run_cm_find
+from codemender import CodeMender
 from finding import Finding
 
 
@@ -69,11 +69,6 @@ class CodeMenderTests(unittest.TestCase):
       with self.assertRaises(RuntimeError):
         cm.find()
 
-  def test_run_find_alias(self):
-    cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
-    self.assertEqual(cm.run_find, cm.find)
-    self.assertEqual(cm.run_cm_find, cm.find)
-
   def test_report(self):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo", cli_version="preview")
     mock_findings = [Finding(finding_id="f-1", title="Issue 1")]
@@ -88,31 +83,12 @@ class CodeMenderTests(unittest.TestCase):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo", cli_version="preview")
     mock_findings = [Finding(finding_id="f-1", title="Issue 1")]
     with patch("codemender.finder.import_findings", return_value=(["f-1"], mock_findings)) as mock_import:
-      assigned, findings = cm.import_findings("/tmp/payload.json")
+      assigned, findings = cm.import_findings(mock_findings)
       self.assertEqual(assigned, ["f-1"])
       self.assertEqual(findings, mock_findings)
       mock_import.assert_called_once_with(
-          "cm", "/tmp/payload.json", "/tmp/test_repo", env=None, cli_version="preview"
+          "cm", mock_findings, "/tmp/test_repo", env=None, cli_version="preview"
       )
-
-  def test_actions(self):
-    cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo", cli_version="preview")
-    with patch("codemender.finder.run_cm_action", return_value=0) as mock_action:
-      self.assertEqual(cm.verify("f-1"), 0)
-      mock_action.assert_called_with(
-          "verify", "f-1", "cm", "/tmp/test_repo", cli_version="preview"
-      )
-
-      self.assertEqual(cm.fix("f-2"), 0)
-      mock_action.assert_called_with(
-          "fix", "f-2", "cm", "/tmp/test_repo", cli_version="preview"
-      )
-
-  def test_module_run_cm_find(self):
-    proc = types.SimpleNamespace(returncode=0, stdout="OK")
-    with patch("codemender.finder.run_command", return_value=proc) as mock_run:
-      run_cm_find("cm", "/tmp/repo", cli_version="preview")
-      mock_run.assert_called_once()
 
 
 if __name__ == "__main__":

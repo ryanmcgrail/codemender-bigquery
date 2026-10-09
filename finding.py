@@ -97,11 +97,6 @@ def _as_bool(value: Any) -> Optional[bool]:
   return text.lower() in _TRUTHY
 
 
-def _utc_now_iso() -> str:
-  """Returns current UTC time as an RFC 3339 string BigQuery accepts."""
-  return datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-
 def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
   """Extracts a normalized `CWE-nnn` identifier from candidates."""
   for candidate in candidates:
@@ -287,83 +282,7 @@ class Finding:
     raw: Dict[str, Any] = dict(data.items()) if hasattr(data, "items") else dict(data)
     return cls(raw)
 
-  # --- Domain Methods ---
-
-  def is_closed(self) -> bool:
-    """Whether finding status is closed/remediated."""
-    return self.status in _CLOSED_STATUSES
-
-  def is_verified(
-      self, force_verified: bool = False, skip_verify: Optional[bool] = None
-  ) -> Optional[bool]:
-    """Whether finding has been verified."""
-    if self.verified is True:
-      return True
-    if self.status in _VERIFIED_STATUSES:
-      return True
-    if self.status in _VERIFY_PASSED_STATUSES and (force_verified or skip_verify is False):
-      return True
-    return self.verified
-
   # --- Serialization & Export Formats ---
-
-  def to_dict(self) -> Dict[str, Any]:
-    """Serializes finding into a standard snake_case dictionary."""
-    return {
-        "finding_id": self.finding_id,
-        "repository": self.repository,
-        "file_path": self.file_path,
-        "start_line": self.start_line,
-        "end_line": self.end_line,
-        "title": self.title,
-        "vuln_type": self.vuln_type,
-        "vuln_id": self.vuln_id,
-        "cwe_id": self.cwe_id,
-        "severity": self.severity,
-        "confidence_level": self.confidence_level,
-        "status": self.status,
-        "source_stage": self.source_stage,
-        "verified": self.verified,
-        "muted": self.muted,
-        "mute_reason": self.mute_reason,
-        "fingerprint": self.fingerprint,
-        "fix_pr_url": self.fix_pr_url,
-        "patch_status": self.patch_status,
-        "finding_source": self.finding_source,
-        "analysis": self.analysis,
-        "snippet": self.snippet,
-        "scan_id": self.scan_id,
-        "scan_timestamp": self.scan_timestamp,
-        "session_id": self.session_id,
-        "updated_at": self.updated_at,
-    }
-
-  def to_cm_dict(self) -> Dict[str, Any]:
-    """Serializes finding into CodeMender PascalCase dict with snake_case aliases."""
-    d: Dict[str, Any] = {
-        "FindingID": self.finding_id,
-        "FilePath": self.file_path,
-        "StartLine": self.start_line,
-        "EndLine": self.end_line,
-        "Title": self.title,
-        "VulnType": self.vuln_type,
-        "VulnID": self.vuln_id,
-        "Severity": self.severity,
-        "Confidence": self.confidence_level,
-        "ConfidenceLevel": self.confidence_level,
-        "Status": self.status,
-        "SourceStage": self.source_stage,
-        "Fingerprint": self.fingerprint,
-        "Analysis": self.analysis,
-        "Snippet": self.snippet,
-        "DismissReason": self.mute_reason,
-        "SessionID": self.session_id,
-        "UpdatedAt": self.updated_at,
-    }
-    for snake, pascal in _FINDING_KEY_ALIASES.items():
-      if pascal in d and snake not in d:
-        d[snake] = d[pascal]
-    return d
 
   def to_cm_import_record(self) -> Dict[str, Any]:
     """Converts finding to simple-JSON record accepted by CodeMender import."""
@@ -385,43 +304,6 @@ class Finding:
     if self.snippet:
       record["snippet"] = self.snippet
     return record
-
-  def to_bq_row(
-      self,
-      scan_id: Optional[str] = None,
-      scan_timestamp: Optional[str] = None,
-      repository: Optional[str] = None,
-      prs: Optional[Mapping[str, str]] = None,
-      wiz_ids: Optional[Iterable[str]] = None,
-      skip_verify: Optional[bool] = None,
-      with_snippets: bool = True,
-      **kwargs: Any,
-  ) -> Dict[str, Any]:
-    """Returns the raw dictionary representing the BigQuery row."""
-    if scan_id is not None:
-      self._raw["scan_id"] = scan_id
-    if scan_timestamp is not None:
-      self._raw["scan_timestamp"] = scan_timestamp
-    if repository is not None:
-      self._raw["repository"] = repository
-    if prs and self.finding_id in prs:
-      self._raw["fix_pr_url"] = prs[self.finding_id]
-    if wiz_ids and self.finding_id in {str(i) for i in wiz_ids}:
-      self._raw["verified"] = True
-      self._raw["finding_source"] = "wiz"
-    if not with_snippets:
-      self._raw.pop("analysis", None)
-      self._raw.pop("snippet", None)
-    return self._raw
-
-  def to_telemetry_dict(
-      self, repo_dir: Optional[str] = None, source_finding_id: Optional[str] = None
-  ) -> Dict[str, Any]:
-    """Maps finding to normalized telemetry fields."""
-    d = self.to_dict()
-    if source_finding_id:
-      d["finding_id"] = source_finding_id
-    return d
 
   def __repr__(self) -> str:
     return f"Finding(finding_id={self.finding_id!r}, file_path={self.file_path!r}, status={self.status!r})"

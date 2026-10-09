@@ -1,22 +1,10 @@
-"""Import BigQuery findings into CodeMender, verify/fix them, and sync state back.
-
-Example:
-  python codemender_bigquery_roundtrip.py \
-    --repository acme/widgets --repo-dir /work/widgets \
-    --project my-gcp-project --dataset codemender_telemetry
-
-Findings are fetched from and merged into the ``findings`` table using
-``(repository, fingerprint)`` as the logical key.
-"""
-
 import argparse
-import json
 import logging
 import os
 from pprint import pprint
 import shutil
 import sys
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from codemender import CodeMender
 from step_1_import_from_bq import (

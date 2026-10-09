@@ -2,11 +2,9 @@ import dataclasses
 import datetime
 import logging
 import re
-from pprint import pprint
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional
 import uuid
 
-from step_1_import_from_bq import _finding_value
 from finding import Finding
 
 logger = logging.getLogger("export-bigquery-findings")
@@ -182,31 +180,6 @@ def build_finding_rows(
     rows.append(row)
 
   return rows
-
-
-def _to_telemetry_finding(
-    finding: Union[Finding],
-) -> Dict[str, Any]:
-  """Maps canonical or snake_case cm report output to the telemetry mapper."""
-  field_names = (
-      "title", "file_path", "severity", "confidence", "confidence_level",
-      "analysis", "snippet", "vuln_type", "vuln_id", "verified", "muted",
-      "mute_reason", "status", "source_stage", "start_line", "end_line",
-      "dismiss_reason", "updated_at",
-  )
-  normalized = {
-      "fingerprint": finding.fingerprint,
-  }
-  aliases = {
-      "confidence_level": "ConfidenceLevel",
-      "vuln_id": "VulnID",
-  }
-  for field in field_names:
-    pascal = aliases.get(field, "".join(part.capitalize() for part in field.split("_")))
-    value = _finding_value(finding, field, pascal)
-    if value is not None:
-      normalized[field] = value
-  return normalized
 
 
 def export_findings_to_bigquery(

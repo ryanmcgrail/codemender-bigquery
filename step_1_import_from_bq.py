@@ -79,58 +79,6 @@ def ensure_dataset(
   client.create_dataset(dataset_resource, exists_ok=True)
 
 
-def _text(row: Any, key: str) -> str:
-  if isinstance(row, Finding):
-    value = getattr(row, key, None)
-  elif hasattr(row, "get"):
-    value = row.get(key)
-  else:
-    value = getattr(row, key, None)
-  return str(value).strip() if value is not None else ""
-
-
-def _int_or_none(value: Any) -> Optional[int]:
-  try:
-    return int(value) if value is not None and str(value).strip() else None
-  except (TypeError, ValueError):
-    return None
-
-
-def _finding_value(finding: Any, snake: str, pascal: str) -> Any:
-  if isinstance(finding, Finding):
-    val = getattr(finding, snake, None)
-    return getattr(finding, pascal, None) if val is None else val
-  value = finding.get(snake) if hasattr(finding, "get") else getattr(finding, snake, None)
-  return (finding.get(pascal) if hasattr(finding, "get") else getattr(finding, pascal, None)) if value is None else value
-
-
-
-def build_cm_import_record(row: Any) -> Dict[str, Any]:
-  """Converts one telemetry row to the simple-JSON dialect accepted by CodeMender."""
-  if isinstance(row, Finding):
-    return row.to_cm_import_record()
-  file_path = _text(row, "file_path")
-  if not file_path:
-    raise ValueError("A BigQuery finding without file_path cannot be imported")
-
-  title = _text(row, "title") or _text(row, "vuln_type") or "CodeMender finding"
-  record: Dict[str, Any] = {
-      "file_path": file_path,
-      "title": title,
-      "message": _text(row, "analysis") or "Imported from CodeMender BigQuery findings.",
-      "severity": _text(row, "severity") or "MEDIUM",
-      "vuln_type": _text(row, "vuln_type") or _text(row, "cwe_id") or title,
-  }
-  for source, destination in (("start_line", "line"), ("end_line", "end_line")):
-    line = _int_or_none(row.get(source))
-    if line is not None:
-      record[destination] = line
-  snippet = _text(row, "snippet")
-  if snippet:
-    record["snippet"] = snippet
-  return record
-
-
 def _latest_findings_query(table_id: str) -> str:
   """Constructs the parameterized BigQuery query to fetch actionable findings."""
   return f"""

@@ -61,23 +61,6 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     )
     self.assertIsNone(exporter._repo_relative_path(None, "/work/repo"))
 
-  def test_to_telemetry_finding(self):
-    cm_finding = exporter.Finding(
-        finding_id = "f-123",
-        file_path = "/work/repo/src/main.py",
-        title = "SQL Injection",
-        vuln_type = "SQL Injection",
-        start_line = 10,
-        status = "OPEN",
-        fingerprint = "fp-123",
-    )
-    telemetry_finding = exporter._to_telemetry_finding(
-        cm_finding, source_finding_id="orig-id"
-    )
-    self.assertEqual(telemetry_finding["finding_id"], "orig-id")
-    self.assertEqual(telemetry_finding["file_path"], "/work/repo/src/main.py")
-    self.assertEqual(telemetry_finding.get("fingerprint"), "fp-123")
-
   def test_build_finding_rows(self):
     ctx = exporter.ScanRunContext(
         scan_id="scan-1",

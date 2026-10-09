@@ -23,25 +23,6 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     self.assertNotIn("PARTITION BY", query)
     self.assertNotIn("QUALIFY ROW_NUMBER()", query)
 
-  def test_build_cm_import_record(self):
-    row = {
-        "file_path": "src/main.py",
-        "title": "SQLi",
-        "analysis": "Unsanitized query",
-        "severity": "HIGH",
-        "start_line": 10,
-        "end_line": 12,
-        "snippet": "db.execute(q)",
-    }
-    record = fetcher.build_cm_import_record(row)
-    self.assertEqual(record["file_path"], "src/main.py")
-    self.assertEqual(record["title"], "SQLi")
-    self.assertEqual(record["message"], "Unsanitized query")
-    self.assertEqual(record["severity"], "HIGH")
-    self.assertEqual(record["line"], 10)
-    self.assertEqual(record["end_line"], 12)
-    self.assertEqual(record["snippet"], "db.execute(q)")
-
   def test_fetch_latest_findings_success(self):
     client = MagicMock()
     mock_job = MagicMock()

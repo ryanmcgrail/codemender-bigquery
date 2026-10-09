@@ -25,13 +25,6 @@ class RunCodeMenderFindTests(unittest.TestCase):
     stdout = "CI Gate Failure: 2 blocking finding"
     self.assertFalse(finder.is_ci_gate_exit(0, stdout))
 
-  def test_parse_token_metric(self):
-    self.assertEqual(finder.parse_token_metric("1.5k"), 1500)
-    self.assertEqual(finder.parse_token_metric("2m"), 2000000)
-    self.assertEqual(finder.parse_token_metric("500"), 500)
-    with self.assertRaises(ValueError):
-      finder.parse_token_metric("")
-
   def test_build_cm_command_find(self):
     cmd = finder.build_cm_command(
         cm_binary="/usr/bin/cm",
@@ -71,27 +64,6 @@ class RunCodeMenderFindTests(unittest.TestCase):
       self.assertEqual(len(loaded), 1)
       self.assertEqual(loaded[0]["file_path"], "src/main.py")
       self.assertNotIn("unexpected", loaded[0])
-
-  def test_run_cm_find_success(self):
-    proc = types.SimpleNamespace(returncode=0, stdout="All clear")
-    with patch.object(finder, "run_command", return_value=proc) as mock_run:
-      finder.run_cm_find("cm", "/tmp/repo", cli_version="preview")
-    mock_run.assert_called_once()
-
-  def test_run_cm_find_handles_ci_gate_exit(self):
-    proc = types.SimpleNamespace(
-        returncode=1,
-        stdout="CI Gate Failure: 1 blocking finding",
-    )
-    with patch.object(finder, "run_command", return_value=proc):
-      # Should not raise exception
-      finder.run_cm_find("cm", "/tmp/repo", cli_version="preview")
-
-  def test_run_cm_find_raises_on_fatal_error(self):
-    proc = types.SimpleNamespace(returncode=2, stdout="Fatal execution error")
-    with patch.object(finder, "run_command", return_value=proc):
-      with self.assertRaises(RuntimeError):
-        finder.run_cm_find("cm", "/tmp/repo", cli_version="preview")
 
   def test_read_findings(self):
     raw = json.dumps({"findings": [{"FindingID": "cm-99"}]})
