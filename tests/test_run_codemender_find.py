@@ -120,12 +120,15 @@ class RunCodeMenderFindTests(unittest.TestCase):
     proc_before = types.SimpleNamespace(returncode=0, stdout=before_raw)
     proc_import = types.SimpleNamespace(returncode=0, stdout="Imported")
     proc_after = types.SimpleNamespace(returncode=0, stdout=after_raw)
+    to_import = [finder.Finding(finding_id="f-2", file_path="src/main.py", title="Bug")]
 
-    with tempfile.NamedTemporaryFile() as tmp:
-      with patch.object(finder, "run_command", side_effect=[proc_before, proc_import, proc_after]):
-        assigned, after = finder.import_findings("cm", tmp.name, "/tmp/repo")
-      self.assertEqual(assigned, ["cm-2"])
-      self.assertEqual(len(after), 2)
+    with patch.object(finder, "run_command", side_effect=[proc_before, proc_import, proc_after]) as mock_run:
+      assigned, after = finder.import_findings("cm", to_import, "/tmp/repo")
+    self.assertEqual(assigned, ["cm-2"])
+    self.assertEqual(len(after), 2)
+    import_cmd = mock_run.call_args_list[1].args[0]
+    temp_file_path = import_cmd[import_cmd.index("-f") + 1]
+    self.assertFalse(os.path.exists(temp_file_path))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from finding import Finding
@@ -436,24 +437,30 @@ def _ids(findings: Sequence[Any]) -> List[str]:
 
 def import_findings(
     cm_binary: str,
-    import_file: str,
+    findings: Sequence[Finding],
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
     cli_version: Optional[str] = None,
 ) -> Tuple[List[str], List[Finding]]:
-  """Imports findings from a file and returns the IDs cm assigned them."""
-  if not os.path.isfile(import_file):
-    raise FindingImportError("import payload file does not exist")
-
+  """Imports findings and returns the IDs cm assigned them."""
   before = set(_ids(fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)))
 
-  import_cmd = build_cm_command(
-      cm_binary,
-      "report",
-      extra_flags=["import", "-f", import_file, "-p", repo_dir],
-      cli_version=cli_version,
-  )
-  import_res = run_command(import_cmd, cwd=repo_dir, env=env, check=False)
+  with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_file:
+    import_file = tmp_file.name
+
+  try:
+    write_import_payload(findings, import_file)
+    import_cmd = build_cm_command(
+        cm_binary,
+        "report",
+        extra_flags=["import", "-f", import_file, "-p", repo_dir],
+        cli_version=cli_version,
+    )
+    import_res = run_command(import_cmd, cwd=repo_dir, env=env, check=False)
+  finally:
+    if os.path.exists(import_file):
+      os.remove(import_file)
+
   if import_res.returncode != 0:
     raise FindingImportError(
         f"'cm report import' exited {import_res.returncode}"
