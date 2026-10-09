@@ -15,7 +15,6 @@ import logging
 import os
 from pprint import pprint
 import shutil
-import subprocess
 import sys
 import tempfile
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -23,13 +22,9 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
-    _finding_id,
-    _latest_findings_query,
     _resolve_project,
-    _row_key,
     _table_id,
     build_cm_import_record,
-    deduplicate_rows_by_key,
     ensure_dataset,
     fetch_findings_from_bigquery,
     resolve_dataset,
@@ -39,12 +34,10 @@ from step_2_cm_find import (
     _run_cm_find,
     import_findings,
     fetch_findings_from_cm_report,
-    read_findings,
     write_import_payload,
 )
 from step_3_export_to_bq import (
     ScanRunContext,
-    _to_telemetry_finding,
     build_finding_rows,
     export_findings_to_bigquery,
     merge_current_findings,
@@ -109,7 +102,7 @@ def run_roundtrip(
   scan_only = not source_rows
   if not source_rows:
     before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
-    before_ids = {_finding_id(finding) for finding in before_findings}
+    before_ids = {finding.finding_id for finding in before_findings}
     _run_cm_find(cm_binary, repo_dir, cli_version)
     post_import_findings = fetch_findings_from_cm_report(
         cm_binary, repo_dir, cli_version=cli_version
@@ -117,26 +110,25 @@ def run_roundtrip(
     new_findings = [
         finding
         for finding in post_import_findings
-        if _finding_id(finding) and _finding_id(finding) not in before_ids
+        if finding.finding_id not in before_ids
     ]
     candidate_findings = new_findings if new_findings else post_import_findings
     source_ids_by_cm_id = {
-        _finding_id(finding): _finding_id(finding)
+        finding.finding_id: finding.finding_id
         for finding in candidate_findings
-        if _finding_id(finding)
     }
     import_rows: List[Mapping[str, Any]] = []
     import_records: List[Dict[str, Any]] = []
     scanned_findings = len(candidate_findings)
   else:
-    _run_cm_find(cm_binary, repo_dir, cli_version)
+    #_run_cm_find(cm_binary, repo_dir, cli_version)
     before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, cli_version=cli_version)
-    before_ids = {_finding_id(f) for f in before_findings if _finding_id(f)}
+    before_ids = {f.finding_id for f in before_findings}
     source_ids_by_cm_id = {fid: fid for fid in before_ids}
     import_rows = [
         row
         for row in source_rows
-        if _finding_id(row) not in before_ids
+        if row.finding_id not in before_ids
     ]
     import_records = [build_cm_import_record(row) for row in import_rows]
     post_import_findings = list(before_findings)

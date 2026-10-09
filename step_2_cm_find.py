@@ -1,11 +1,9 @@
-import argparse
 import json
 import logging
 import os
 from pprint import pprint
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple

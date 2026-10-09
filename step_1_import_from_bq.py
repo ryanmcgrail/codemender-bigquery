@@ -131,14 +131,6 @@ def _finding_value(finding: Any, snake: str, pascal: str) -> Any:
   return (finding.get(pascal) if hasattr(finding, "get") else getattr(finding, pascal, None)) if value is None else value
 
 
-def _finding_id(finding: Any) -> str:
-  if isinstance(finding, Finding):
-    return finding.finding_id
-  value = _finding_value(finding, "finding_id", "FindingID")
-  return str(value) if value else ""
-
-
-
 
 def build_cm_import_record(row: Any) -> Dict[str, Any]:
   """Converts one telemetry row to the simple-JSON dialect accepted by CodeMender."""

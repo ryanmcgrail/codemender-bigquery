@@ -9,9 +9,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import uuid
 
 from step_1_import_from_bq import (
-    _finding_id,
     _finding_value,
-    _int_or_none,
     deduplicate_rows_by_key,
 )
 from finding import Finding
@@ -205,7 +203,7 @@ def _to_telemetry_finding(
       "dismiss_reason", "updated_at",
   )
   normalized = {
-      "finding_id": _finding_id(finding),
+      "finding_id": finding.finding_id,
       "fingerprint": finding.fingerprint,
   }
   aliases = {
