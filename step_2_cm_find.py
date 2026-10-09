@@ -252,7 +252,6 @@ def run_command(
     cwd: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
     check: bool = True,
-    capture_stderr: bool = True,
     print_to_stdout: bool = False,
 ) -> subprocess.CompletedProcess:
   """Executes a subprocess command, streaming stdout/stderr in real-time."""
@@ -264,7 +263,7 @@ def run_command(
       env=env,
       stdin=subprocess.DEVNULL,
       stdout=subprocess.PIPE,
-      stderr=subprocess.STDOUT if capture_stderr else sys.stderr,
+      stderr=subprocess.DEVNULL,
       text=True,
       bufsize=1,
   )
@@ -345,7 +344,6 @@ def fetch_findings_from_cm_report(
       cwd=repo_dir,
       env=env,
       check=False,
-      capture_stderr=False,
   )
   if res.returncode != 0:
     raise FindingImportError(
@@ -439,7 +437,7 @@ def run_cm_find(
   command = build_cm_command(
       cm_binary, "find", target_or_id=repo_dir, cli_version=cli_version
   )
-  result = run_command(command, cwd=repo_dir, check=False)
+  result = run_command(command, cwd=repo_dir, check=False, print_to_stdout=True)
   returncode = getattr(result, "returncode", 0)
   stdout = getattr(result, "stdout", "")
   if returncode and not is_ci_gate_exit(returncode, stdout or ""):

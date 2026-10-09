@@ -157,7 +157,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+  logging.basicConfig(level=logging.ERROR, format="%(levelname)s %(message)s")
   args = _parse_args(argv)
   try:
     summary = run_roundtrip(
