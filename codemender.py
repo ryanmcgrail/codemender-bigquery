@@ -1,7 +1,7 @@
 """CodeMender CLI wrapper class and helpers."""
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from finding import Finding
 import step_2_cm_find as finder

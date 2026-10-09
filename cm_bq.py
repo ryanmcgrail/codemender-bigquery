@@ -79,7 +79,6 @@ def run_roundtrip(
 
     client = bigquery.Client(project=project)
 
-  cm_binary = cm_binary or shutil.which("cm") or "cm",
   cm = CodeMender(
     cm_binary = cm_binary,
     repo_dir = repo_dir,
@@ -91,10 +90,11 @@ def run_roundtrip(
   bq_findings = fetch_findings_from_bigquery(
       client, table_id, repository, location=location
   )
-  imported_ids, after_find_findings = cm.import_findings(bq_findings)
 
   print("BigQuery findings:")
   pprint(bq_findings, indent = 2)
+
+  imported_ids, after_find_findings = cm.import_findings(bq_findings)
 
   _print_heading("Running CodeMender find on repository...")
   before_find_findings = cm.list_findings()
