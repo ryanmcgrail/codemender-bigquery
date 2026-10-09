@@ -2,12 +2,12 @@
 
 import json
 import os
+import subprocess
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from finding import Finding
 import step_2_cm_find as finder
 
 
@@ -61,7 +61,7 @@ class RunCodeMenderFindTests(unittest.TestCase):
 
   def test_write_import_payload(self):
     findings = [
-        Finding.from_dict({
+        {
             "file_path": "src/main.py",
             "line": 10,
             "end_line": 12,
@@ -70,7 +70,8 @@ class RunCodeMenderFindTests(unittest.TestCase):
             "severity": "HIGH",
             "vuln_type": "Injection",
             "snippet": "code()",
-        })
+            "unexpected": "ignore",
+        }
     ]
     with tempfile.TemporaryDirectory() as tmpdir:
       dest = os.path.join(tmpdir, "payload.json")
@@ -80,6 +81,7 @@ class RunCodeMenderFindTests(unittest.TestCase):
         loaded = json.load(f)
       self.assertEqual(len(loaded), 1)
       self.assertEqual(loaded[0]["file_path"], "src/main.py")
+      self.assertNotIn("unexpected", loaded[0])
 
   def test_run_cm_find_success(self):
     proc = types.SimpleNamespace(returncode=0, stdout="All clear")

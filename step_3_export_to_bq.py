@@ -63,6 +63,23 @@ def _utc_now_iso() -> str:
   """Returns the current UTC time as an RFC 3339 string BigQuery accepts."""
   return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+
+def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
+  """Extracts a normalized `CWE-nnn` identifier from any of the given strings."""
+  for candidate in candidates:
+    if not candidate:
+      continue
+    match = _CWE_PATTERN.search(str(candidate))
+    if match:
+      return match.group(1).upper()
+  return None
+
+
+def _repo_relative_path(raw_path: Any, repo_dir: Optional[str] = None) -> Optional[str]:
+  """Returns a finding's file path as-is."""
+  return _as_str(raw_path)
+
+
 def _row_verified(
     finding: Dict[str, Any], status: str, force_verified: bool,
     skip_verify: Optional[bool],
@@ -109,10 +126,99 @@ class ScanRunContext:
 
 
 def build_finding_rows(
-    findings: Iterable[Finding],
+    ctx: ScanRunContext,
+    findings: Optional[Iterable[Dict[str, Any]]],
+    scan_timestamp: Optional[str] = None,
+    finding_prs: Optional[Dict[str, str]] = None,
+    with_snippets: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
-  return [f.to_dict() for f in findings]
+  if not findings:
+    return []
+
+  timestamp = scan_timestamp or _utc_now_iso()
+  scan_id = _as_str(ctx.scan_id) or "unknown"
+  repository = _as_str(ctx.repository)
+  prs = finding_prs or {}
+  repo_dir = _as_str(ctx.repo_dir)
+  wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
+
+  rows: List[Dict[str, Any]] = []
+  for finding in findings:
+    if not isinstance(finding, dict):
+      continue
+    finding_id = _as_str(finding.get("finding_id"))
+    if not finding_id:
+      continue
+
+    title = _as_str(finding.get("title"))
+    status = (_as_str(finding.get("status")) or "DETECTED").upper()
+    vuln_type = _as_str(finding.get("vuln_type"))
+    severity = _as_str(finding.get("severity"))
+    confidence_level = _as_str(
+        finding.get("confidence_level")
+    ) or _as_str(finding.get("confidence"))
+
+    row: Dict[str, Any] = {
+        "finding_id": finding_id,
+        "scan_id": scan_id,
+        "scan_timestamp": timestamp,
+        "repository": repository,
+        "title": title,
+        "vuln_type": vuln_type,
+        "cwe_id": extract_cwe_id(finding.get("vuln_id"), vuln_type, title),
+        "severity": severity.upper() if severity else None,
+        "confidence_level": confidence_level.upper() if confidence_level else None,
+        "file_path": _repo_relative_path(finding.get("file_path"), repo_dir),
+        "start_line": _as_int(finding.get("start_line")),
+        "end_line": _as_int(finding.get("end_line")),
+        "status": status,
+        "source_stage": _as_str(finding.get("source_stage")),
+        "verified": _row_verified(finding, status, finding_id in wiz_ids, ctx.skip_verify),
+        "muted": _as_bool(finding.get("muted")),
+        "mute_reason": _as_str(finding.get("mute_reason"))
+        or _as_str(finding.get("dismiss_reason")),
+        "fingerprint": _as_str(finding.get("fingerprint")),
+        "fix_pr_url": _as_str(prs.get(finding_id)),
+        "patch_status": _as_str(finding.get("patch_status")),
+        "finding_source": "wiz" if finding_id in wiz_ids else "codemender",
+        "analysis": _as_str(finding.get("analysis")),
+        "snippet": _as_str(finding.get("snippet"))
+    }
+
+    rows.append(row)
+
+  return rows
+
+
+def _to_telemetry_finding(
+    finding: Union[Finding],
+    source_finding_id: Optional[str] = None,
+) -> Dict[str, Any]:
+  """Maps canonical or snake_case cm report output to the telemetry mapper."""
+  field_names = (
+      "title", "file_path", "severity", "confidence", "confidence_level",
+      "analysis", "snippet", "vuln_type", "vuln_id", "verified", "muted",
+      "mute_reason", "status", "source_stage", "start_line", "end_line",
+      "dismiss_reason", "updated_at",
+  )
+  normalized = {
+      "finding_id": finding.finding_id,
+      "fingerprint": finding.fingerprint,
+  }
+  aliases = {
+      "confidence_level": "ConfidenceLevel",
+      "vuln_id": "VulnID",
+  }
+  for field in field_names:
+    pascal = aliases.get(field, "".join(part.capitalize() for part in field.split("_")))
+    value = _finding_value(finding, field, pascal)
+    if value is not None:
+      normalized[field] = value
+  if source_finding_id:
+    normalized["finding_id"] = source_finding_id
+  return normalized
+
 
 def merge_current_findings(
     client: Any,
