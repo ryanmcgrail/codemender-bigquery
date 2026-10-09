@@ -418,8 +418,8 @@ def fetch_findings_from_cm_report(
   if (res.stdout or "").strip() == "null":
     return []
 
-  json_findings = json.JSONDecoder().decode(res.stdout);
-  return [Finding.from_cm_json(json_finding) for json_finding in json_findings]
+  json_findings = json.JSONDecoder().decode(res.stdout)["findings"]
+  return [Finding.from_dict(json_finding) for json_finding in json_findings]
 
 
 def _ids(findings: Sequence[Any]) -> List[str]:

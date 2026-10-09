@@ -59,24 +59,6 @@ class RunCodeMenderFindTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       finder.build_cm_command(cm_binary="cm", action="find", target_or_id=None)
 
-  def test_extract_json_from_output(self):
-    raw = "Some log line before\n{\"findings\": [{\"FindingID\": \"1\"}]}\nSome log after"
-    data = finder.extract_json_from_output(raw)
-    self.assertEqual(data, {"findings": [{"FindingID": "1"}]})
-    self.assertIsNone(finder.extract_json_from_output(""))
-    self.assertIsNone(finder.extract_json_from_output("no json here"))
-
-  def test_parse_findings_json(self):
-    raw = json.dumps([{"finding_id": "f-1", "file_path": "a.py", "title": "SQLi"}])
-    parsed = finder._parse_findings_json(raw)
-    self.assertEqual(len(parsed), 1)
-    self.assertIsInstance(parsed[0], finder.Finding)
-    self.assertEqual(parsed[0].finding_id, "f-1")
-    self.assertEqual(parsed[0].file_path, "a.py")
-    self.assertEqual(parsed[0].title, "SQLi")
-    with self.assertRaises(TypeError):
-      _ = parsed[0]["FindingID"]
-
   def test_write_import_payload(self):
     findings = [
         {

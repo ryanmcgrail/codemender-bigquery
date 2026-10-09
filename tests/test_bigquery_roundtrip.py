@@ -147,7 +147,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "fetch_latest_findings", return_value=[source]),
           patch.object(
               roundtrip,
-              "read_findings",
+              "fetch_findings_from_cm_report",
               side_effect=[[], [imported]],
           ),
           patch.object(roundtrip, "_run_cm_find") as cm_find,
@@ -188,7 +188,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "fetch_latest_findings", return_value=[]),
           patch.object(
               roundtrip,
-              "read_findings",
+              "fetch_findings_from_cm_report",
               side_effect=[[], [discovered]],
           ),
           patch.object(roundtrip, "_run_cm_find") as cm_find,
@@ -256,7 +256,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
           patch.object(roundtrip, "fetch_latest_findings", return_value=[]),
           patch.object(
               roundtrip,
-              "read_findings",
+              "fetch_findings_from_cm_report",
               side_effect=[[existing], [existing]],
           ),
           patch.object(roundtrip, "_run_cm_find") as cm_find,

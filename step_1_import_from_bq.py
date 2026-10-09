@@ -186,7 +186,7 @@ WHERE UPPER(COALESCE(status, '')) NOT IN (
 """
 
 
-def fetch_latest_findings(
+def fetch_findings_from_bigquery(
     client: Any,
     table_id: str,
     repository: str,
@@ -205,7 +205,7 @@ def fetch_latest_findings(
         _latest_findings_query(table_id), job_config=config, location=location
     ).result()
     return [
-        Finding.from_bq_row(dict(row.items()) if hasattr(row, "items") else row)
+        Finding.from_dict(dict(row.items()) if hasattr(row, "items") else row)
         for row in rows
     ]
   except Exception as error:  # pylint: disable=broad-exception-caught

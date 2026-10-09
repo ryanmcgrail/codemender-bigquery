@@ -62,7 +62,7 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     ]
     client.query.return_value = mock_job
 
-    results = fetcher.fetch_latest_findings(client, "proj.ds.tbl", "acme/repo")
+    results = fetcher.fetch_findings_from_bigquery(client, "proj.ds.tbl", "acme/repo")
     self.assertEqual(len(results), 1)
     self.assertIsInstance(results[0], fetcher.Finding)
     self.assertEqual(results[0].finding_id, "f-1")
@@ -71,7 +71,7 @@ class FetchBigQueryFindingsTests(unittest.TestCase):
     client = MagicMock()
     client.query.side_effect = RuntimeError("BigQuery unavailable")
 
-    results = fetcher.fetch_latest_findings(client, "proj.ds.tbl", "acme/repo")
+    results = fetcher.fetch_findings_from_bigquery(client, "proj.ds.tbl", "acme/repo")
     self.assertEqual(results, [])
 
 

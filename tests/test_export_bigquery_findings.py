@@ -62,17 +62,17 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     self.assertIsNone(exporter._repo_relative_path(None, "/work/repo"))
 
   def test_to_telemetry_finding(self):
-    cm_finding = {
-        "finding_id": "f-123",
-        "file_path": "/work/repo/src/main.py",
-        "title": "SQL Injection",
-        "vuln_type": "SQL Injection",
-        "start_line": 10,
-        "status": "OPEN",
-        "fingerprint": "fp-123",
-    }
+    cm_finding = exporter.Finding(
+        finding_id = "f-123",
+        file_path = "/work/repo/src/main.py",
+        title = "SQL Injection",
+        vuln_type = "SQL Injection",
+        start_line = 10,
+        status = "OPEN",
+        fingerprint = "fp-123",
+    )
     telemetry_finding = exporter._to_telemetry_finding(
-        cm_finding, "/work/repo", source_finding_id="orig-id"
+        cm_finding, source_finding_id="orig-id"
     )
     self.assertEqual(telemetry_finding["finding_id"], "orig-id")
     self.assertEqual(telemetry_finding["file_path"], "/work/repo/src/main.py")
@@ -146,28 +146,6 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
         repo_dir="/tmp/repo",
     )
     self.assertEqual(merged, 1)
-
-  def test_export_findings_to_bigquery_with_dicts(self):
-    client = _MockClient()
-    findings = [
-        {
-            "finding_id": "cm-1",
-            "file_path": "src/app.py",
-            "title": "XSS",
-            "vuln_type": "XSS",
-            "start_line": 5,
-            "status": "OPEN",
-        }
-    ]
-    merged = exporter.export_findings_to_bigquery(
-        client=client,
-        table_id="project.dataset.findings",
-        findings=findings,
-        repository="acme/widgets",
-        repo_dir="/tmp/repo",
-    )
-    self.assertEqual(merged, 1)
-
 
 if __name__ == "__main__":
   unittest.main()

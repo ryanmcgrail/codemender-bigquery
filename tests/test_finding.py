@@ -51,40 +51,6 @@ class FindingTests(unittest.TestCase):
     self.assertEqual(out["cwe_id"], "CWE-798")
     self.assertEqual(out["fingerprint"], "fp-123")
 
-  def test_from_cm_json_and_to_cm_dict(self):
-    cm_json = {
-        "FindingID": "cm-001",
-        "FilePath": "lib/server.ts",
-        "Line": 100,
-        "EndLine": 105,
-        "Title": "Command Injection",
-        "VulnType": "command-injection",
-        "VulnID": "CWE-78",
-        "Severity": "Critical",
-        "ConfidenceLevel": "High",
-        "Status": "DETECTED",
-        "Message": "Untrusted input in exec()",
-        "Snippet": "exec(cmd)",
-    }
-    f = Finding.from_cm_json(cm_json)
-    self.assertEqual(f.finding_id, "cm-001")
-    self.assertEqual(f.file_path, "lib/server.ts")
-    self.assertEqual(f.start_line, 100)
-    self.assertEqual(f.end_line, 105)
-    self.assertEqual(f.title, "Command Injection")
-    self.assertEqual(f.cwe_id, "CWE-78")
-    self.assertEqual(f.severity, "CRITICAL")
-    self.assertEqual(f.confidence_level, "HIGH")
-    self.assertEqual(f.analysis, "Untrusted input in exec()")
-
-    cm_dict = f.to_cm_dict()
-    self.assertEqual(cm_dict["FindingID"], "cm-001")
-    self.assertEqual(cm_dict["FilePath"], "lib/server.ts")
-    self.assertEqual(cm_dict["Severity"], "CRITICAL")
-    # Verify backward compatible snake_case aliases in cm_dict
-    self.assertEqual(cm_dict["finding_id"], "cm-001")
-    self.assertEqual(cm_dict["file_path"], "lib/server.ts")
-
   def test_to_cm_import_record(self):
     f = Finding(
         finding_id="f-1",

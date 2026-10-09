@@ -25,7 +25,6 @@ _VERIFY_PASSED_STATUSES = _VERIFIED_STATUSES | _FIXED_STATUSES | _FAILED_FIX_STA
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
 
 _CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
-_REPEATED_SLASHES = re.compile(r"/{2,}")
 _TRUTHY = frozenset({"true", "1", "yes", "on"})
 
 
@@ -194,17 +193,8 @@ def build_finding_rows(
   return rows
 
 
-def _fingerprint_for_cm_finding(
-    finding: Any, repo_dir: Optional[str] = None,
-) -> Optional[str]:
-  """Derives a stable VCS fingerprint for a CodeMender finding."""
-  fingerprint = _finding_value(finding, "fingerprint", "Fingerprint")
-  return str(fingerprint) if fingerprint else None
-
-
 def _to_telemetry_finding(
-    finding: Union[Finding, Mapping[str, Any]],
-    repo_dir: str,
+    finding: Union[Finding],
     source_finding_id: Optional[str] = None,
 ) -> Dict[str, Any]:
   """Maps canonical or snake_case cm report output to the telemetry mapper."""
@@ -216,7 +206,7 @@ def _to_telemetry_finding(
   )
   normalized = {
       "finding_id": _finding_id(finding),
-      "fingerprint": _fingerprint_for_cm_finding(finding, repo_dir),
+      "fingerprint": finding.fingerprint,
   }
   aliases = {
       "confidence_level": "ConfidenceLevel",
@@ -369,15 +359,11 @@ def export_findings_to_bigquery(
   source_ids = source_ids_by_cm_id or {}
   allowed_ids = set(ids_to_process) if ids_to_process is not None else None
 
-  finding_objs = [
-      f if isinstance(f, Finding) else Finding.from_dict(f, repo_dir)
-      for f in findings
-  ]
   findings_for_upload = [
       _to_telemetry_finding(
-          finding, repo_dir, source_ids.get(finding.finding_id)
+          finding, source_ids.get(finding.finding_id)
       )
-      for finding in finding_objs
+      for finding in findings
       if allowed_ids is None or finding.finding_id in allowed_ids
   ]
   context = ScanRunContext(
