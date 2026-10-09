@@ -17,9 +17,10 @@ from pprint import pprint
 import shutil
 import sys
 import tempfile
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-
+from finding import Finding
+from codemender import CodeMender
 from step_1_import_from_bq import (
     DEFAULT_TABLE,
     _resolve_project,
@@ -30,6 +31,7 @@ from step_1_import_from_bq import (
     resolve_dataset,
     resolve_project,
 )
+
 from step_2_cm_find import (
     _run_cm_find,
     import_findings,
@@ -86,7 +88,13 @@ def run_roundtrip(
     from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
     client = bigquery.Client(project=project)
-  cm_binary = cm_binary or shutil.which("cm") or "cm"
+
+  cm_binary = cm_binary or shutil.which("cm") or "cm",
+  codemender = CodeMender(
+    cm_binary = cm_binary,
+    repo_dir = repo_dir,
+    cli_version = cli_version
+  )
 
   _print_heading("Fetching latest findings from BigQuery...")
   ensure_dataset(client, project, dataset, location)
