@@ -6,7 +6,7 @@ Example:
     --project my-gcp-project --dataset codemender_telemetry
 
 Findings are fetched from and merged into the ``findings`` table using
-``(repository, finding_id)`` as the logical key.
+``(repository, fingerprint)`` as the logical key.
 """
 
 import argparse
@@ -94,15 +94,17 @@ def run_roundtrip(
 
   print("BigQuery findings:")
   pprint(bq_findings, indent = 2)
+  print()
 
   imported_ids, after_find_findings = cm.import_findings(bq_findings)
 
+  print(f"Imported {len(imported_ids)} findings into CodeMender.")
 
   _print_heading("Running CodeMender find on repository...")
 
   before_find_findings = cm.list_findings()
   before_ids = {f.finding_id for f in before_find_findings}
-  #cm.find()
+  cm.find('routes/login.ts')
   after_find_findings = cm.list_findings()
   new_findings = [
       finding

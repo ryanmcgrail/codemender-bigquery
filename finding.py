@@ -278,10 +278,10 @@ class Finding:
 
   @property
   def row_key(self) -> Tuple[str, str]:
-    """Returns composite primary key (repository, finding_id)."""
-    if not self.repository or not self.finding_id:
-      raise ValueError("A unique finding must have repository and finding_id")
-    return self.repository, self.finding_id
+    """Returns composite primary key (repository, fingerprint)."""
+    if not self.repository or not self.fingerprint:
+      raise ValueError("A unique finding must have repository and fingerprint")
+    return self.repository, self.fingerprint
 
   # --- Factory Methods ---
 
@@ -447,7 +447,7 @@ class Finding:
   def deduplicate(
       findings: Iterable[Union[Mapping[str, Any], Finding]],
   ) -> List[Finding]:
-    """Deduplicates findings by (repository, finding_id), keeping the last."""
+    """Deduplicates findings by (repository, fingerprint), keeping the last."""
     keyed: Dict[Tuple[str, str], Finding] = {}
     for item in findings:
       finding = item if isinstance(item, Finding) else Finding.from_dict(item)

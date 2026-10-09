@@ -104,10 +104,10 @@ class FindingTests(unittest.TestCase):
     self.assertNotIn("analysis", row_no_snippet)
 
   def test_row_key(self):
-    f = Finding(finding_id="f-1", repository="owner/repo")
-    self.assertEqual(f.row_key, ("owner/repo", "f-1"))
+    f = Finding(fingerprint="fp-1", repository="owner/repo")
+    self.assertEqual(f.row_key, ("owner/repo", "fp-1"))
 
-    f_no_repo = Finding(finding_id="f-1", repository="")
+    f_no_repo = Finding(fingerprint="fp-1", repository="")
     with self.assertRaises(ValueError):
       _ = f_no_repo.row_key
 
@@ -154,9 +154,9 @@ class FindingTests(unittest.TestCase):
 
   def test_deduplicate(self):
     findings = [
-        {"finding_id": "1", "repository": "r1", "title": "First"},
-        {"finding_id": "1", "repository": "r1", "title": "Updated"},
-        {"finding_id": "2", "repository": "r1", "title": "Other"},
+        {"finding_id": "1", "fingerprint": "fp-1", "repository": "r1", "title": "First"},
+        {"finding_id": "1", "fingerprint": "fp-1", "repository": "r1", "title": "Updated"},
+        {"finding_id": "2", "fingerprint": "fp-2", "repository": "r1", "title": "Other"},
     ]
     deduped = Finding.deduplicate(findings)
     self.assertEqual(len(deduped), 2)

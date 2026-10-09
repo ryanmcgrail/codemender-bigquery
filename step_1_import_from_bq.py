@@ -100,16 +100,16 @@ def _row_key(row: Any) -> Tuple[str, str]:
   if isinstance(row, Finding):
     return row.row_key
   repository = _text(row, "repository")
-  finding_id = _text(row, "finding_id")
-  if not repository or not finding_id:
-    raise ValueError("A unique finding must have repository and finding_id")
-  return repository, finding_id
+  fingerprint = _text(row, "fingerprint")
+  if not repository or not fingerprint:
+    raise ValueError("A unique finding must have repository and fingerprint")
+  return repository, fingerprint
 
 
 def deduplicate_rows_by_key(
     rows: Iterable[Any],
 ) -> List[Dict[str, Any]]:
-  """Keeps the last row for each (repository, finding_id) pair."""
+  """Keeps the last row for each (repository, fingerprint) pair."""
   keyed: Dict[Tuple[str, str], Dict[str, Any]] = {}
   for row in rows:
     if isinstance(row, Finding):
@@ -165,10 +165,10 @@ SELECT * FROM (
   SELECT *
   FROM `{table_id}`
   WHERE repository = @repository
-    AND NULLIF(TRIM(finding_id), '') IS NOT NULL
+    AND NULLIF(TRIM(fingerprint), '') IS NOT NULL
     AND NULLIF(TRIM(file_path), '') IS NOT NULL
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY repository, finding_id
+    PARTITION BY repository, fingerprint
     ORDER BY scan_timestamp DESC, scan_id DESC
   ) = 1
 )
@@ -184,7 +184,7 @@ def fetch_findings_from_bigquery(
     repository: str,
     location: Optional[str] = None,
 ) -> List[Finding]:
-  """Loads one latest actionable source row per repository/finding_id from BigQuery."""
+  """Loads one latest actionable source row per repository/fingerprint from BigQuery."""
   from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
 
   try:

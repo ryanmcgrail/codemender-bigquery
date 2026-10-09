@@ -2,6 +2,7 @@ import dataclasses
 import datetime
 import logging
 import re
+from pprint import pprint
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
 import uuid
 
@@ -224,7 +225,7 @@ def merge_current_findings(
     location: Optional[str] = None,
     **kwargs: Any,
 ) -> int:
-  """MERGEs rows by repository/finding_id into the findings table."""
+  """MERGEs rows by repository/fingerprint into the findings table."""
   if len(args) >= 2:
     source_table_id = table_id
     target_table_id = str(args[0])
@@ -295,7 +296,7 @@ def merge_current_findings(
       pass
 
   columns = [field.name for field in schema]
-  identity = {"repository", "finding_id"}
+  identity = {"repository", "fingerprint"}
   missing_identity = identity.difference(columns)
   if missing_identity:
     raise ValueError(
@@ -327,7 +328,7 @@ def merge_current_findings(
     merge_sql = f"""
 MERGE `{table_id}` AS T
 USING `{stage_table_id}` AS S
-ON T.repository = S.repository AND T.finding_id = S.finding_id
+ON T.repository = S.repository AND T.fingerprint = S.fingerprint
 WHEN MATCHED THEN UPDATE SET {updates_sql}
 WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
 """
@@ -361,6 +362,9 @@ def export_findings_to_bigquery(
       for finding in findings
       if allowed_ids is None or finding.finding_id in allowed_ids
   ]
+
+  pprint(findings_for_upload, indent=2)
+
   context = ScanRunContext(
       stage="bigquery_roundtrip",
       scan_id=scan_id or str(uuid.uuid4()),

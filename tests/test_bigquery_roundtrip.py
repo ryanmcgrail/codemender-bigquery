@@ -92,11 +92,11 @@ class BigQueryRoundtripTests(unittest.TestCase):
         run.call_args.args[0], ["gcloud", "config", "get-value", "project"]
     )
 
-  def test_rows_deduplicate_by_repository_and_finding_id(self):
+  def test_rows_deduplicate_by_repository_and_fingerprint(self):
     rows = [
-        {"repository": "acme/widgets", "finding_id": "same", "title": "old"},
-        {"repository": "acme/widgets", "finding_id": "same", "title": "new"},
-        {"repository": "acme/api", "finding_id": "same", "title": "other repo"},
+        {"repository": "acme/widgets", "fingerprint": "same", "title": "old"},
+        {"repository": "acme/widgets", "fingerprint": "same", "title": "new"},
+        {"repository": "acme/api", "fingerprint": "same", "title": "other repo"},
     ]
 
     result = roundtrip.deduplicate_rows_by_key(rows)
@@ -212,9 +212,9 @@ class BigQueryRoundtripTests(unittest.TestCase):
   def test_latest_query_ranks_before_filtering_closed_status(self):
     query = roundtrip._latest_findings_query("project.dataset.history")
 
-    self.assertIn("PARTITION BY repository, finding_id", query)
+    self.assertIn("PARTITION BY repository, fingerprint", query)
     self.assertLess(query.index("QUALIFY ROW_NUMBER"), query.index("WHERE UPPER"))
-    self.assertIn("NULLIF(TRIM(finding_id), '') IS NOT NULL", query)
+    self.assertIn("NULLIF(TRIM(fingerprint), '') IS NOT NULL", query)
 
   def test_merge_uses_composite_key_and_removes_staging_table(self):
     client = _Client()
@@ -236,7 +236,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
 
     self.assertEqual(merged, 1)
     self.assertIn(
-        "ON T.repository = S.repository AND T.finding_id = S.finding_id",
+        "ON T.repository = S.repository AND T.fingerprint = S.fingerprint",
         client.queries[-1],
     )
     self.assertNotIn("unexpected", client.loaded[0][0])

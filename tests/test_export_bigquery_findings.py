@@ -131,6 +131,7 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     findings = [
         exporter.Finding(
             finding_id="cm-1",
+            fingerprint="fp-1",
             file_path="src/app.py",
             title="XSS",
             vuln_type="XSS",
