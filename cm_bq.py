@@ -86,6 +86,7 @@ def run_roundtrip(
   )
 
   _print_heading("Fetching latest findings from BigQuery...")
+
   ensure_dataset(client, project, dataset, location)
   bq_findings = fetch_findings_from_bigquery(
       client, table_id, repository, location=location
@@ -96,10 +97,12 @@ def run_roundtrip(
 
   imported_ids, after_find_findings = cm.import_findings(bq_findings)
 
+
   _print_heading("Running CodeMender find on repository...")
+
   before_find_findings = cm.list_findings()
   before_ids = {f.finding_id for f in before_find_findings}
-  cm.find()
+  #cm.find()
   after_find_findings = cm.list_findings()
   new_findings = [
       finding

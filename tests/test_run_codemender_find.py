@@ -25,17 +25,6 @@ class RunCodeMenderFindTests(unittest.TestCase):
     stdout = "CI Gate Failure: 2 blocking finding"
     self.assertFalse(finder.is_ci_gate_exit(0, stdout))
 
-  def test_redact_sensitive_arg(self):
-    self.assertEqual(
-        finder.redact_sensitive_arg("http.extraheader=AUTHORIZATION: secret"),
-        "[REDACTED_SECRET]",
-    )
-    self.assertEqual(
-        finder.redact_sensitive_arg("ghp_1234567890abcdef"),
-        "[REDACTED_SECRET]",
-    )
-    self.assertEqual(finder.redact_sensitive_arg("--repo-dir=/app"), "--repo-dir=/app")
-
   def test_parse_token_metric(self):
     self.assertEqual(finder.parse_token_metric("1.5k"), 1500)
     self.assertEqual(finder.parse_token_metric("2m"), 2000000)

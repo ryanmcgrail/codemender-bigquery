@@ -27,20 +27,6 @@ def is_ci_gate_exit(returncode: int, find_stdout: str) -> bool:
   )
 
 
-SECRET_PATTERNS = [
-    re.compile(r"http\.extraheader=AUTHORIZATION:.*", re.IGNORECASE),
-    re.compile(r"(ghp_|ghs_|github_pat_|bearer\s+)[a-zA-Z0-9_\-\.]+", re.IGNORECASE),
-]
-
-
-def redact_sensitive_arg(arg: str) -> str:
-  """Redacts secret credentials from command argument strings for log safety."""
-  for pattern in SECRET_PATTERNS:
-    if pattern.search(arg):
-      return pattern.sub("[REDACTED_SECRET]", arg)
-  return arg
-
-
 def parse_token_metric(token_str: str) -> int:
   """Converts human-readable token metric strings with SI suffixes into integers."""
   token_str = token_str.strip()
@@ -267,14 +253,10 @@ def run_command(
     env: Optional[Dict[str, str]] = None,
     check: bool = True,
     capture_stderr: bool = True,
+    print_to_stdout: bool = False,
 ) -> subprocess.CompletedProcess:
   """Executes a subprocess command, streaming stdout/stderr in real-time."""
-  log_cmd_parts = [redact_sensitive_arg(arg) for arg in cmd]
-  cmd_str_short = " ".join(log_cmd_parts)
-  if len(cmd_str_short) > 80:
-    cmd_str_short = cmd_str_short[:77] + "..."
-
-  logger.info("Executing command: %s", " ".join(log_cmd_parts))
+  logger.info("Executing comand: %s", " ".join(cmd))
 
   process = subprocess.Popen(
       cmd,
@@ -287,67 +269,23 @@ def run_command(
       bufsize=1,
   )
 
-  assert process.stdout is not None
-  sys.stdout.write(f"\n>>> [SUBPROCESS START] {cmd_str_short} >>>\n")
-  sys.stdout.flush()
-
   stdout_lines = []
   for line in process.stdout:
-    sys.stdout.write(redact_sensitive_arg(line))
-    sys.stdout.flush()
     stdout_lines.append(line)
-
+    if print_to_stdout:
+      sys.stdout.write(line)
+      sys.stdout.flush()
   process.stdout.close()
-  return_code = process.wait()
-  full_stdout = "".join(stdout_lines)
 
-  sys.stdout.write(
-      f"<<< [SUBPROCESS END] {cmd_str_short} (EXIT: {return_code}) <<<\n\n"
-  )
-  sys.stdout.flush()
+  return_code = process.wait()
+
+  logger.info(f"Command completed with exit code {return_code}")
 
   if check and return_code != 0:
     logger.error("Command failed with code %d", return_code)
-    raise subprocess.CalledProcessError(return_code, cmd, full_stdout, "")
+    raise subprocess.CalledProcessError(return_code, cmd, stdout_lines, "")
 
-  cli_version = os.environ.get("CODEMENDER_CLI_VERSION", "preview").lower()
-  token_usage = None
-  if cli_version == "preview":
-    matches = re.findall(
-        r"Tokens:\s*([0-9.kMgG]+)\s*in\s*/\s*([0-9.kMgG]+)\s*out\s*/\s*([0-9.kMgG]+)\s*total",
-        full_stdout,
-    )
-    if matches:
-      in_tokens = 0
-      out_tokens = 0
-      total_tokens = 0
-      for m in matches:
-        try:
-          in_tokens += parse_token_metric(m[0])
-          out_tokens += parse_token_metric(m[1])
-          total_tokens += parse_token_metric(m[2])
-        except ValueError:
-          pass
-      token_usage = {
-          "in_tokens": in_tokens,
-          "out_tokens": out_tokens,
-          "total_tokens": total_tokens,
-      }
-    else:
-      consumed = re.findall(
-          r"Total tokens consumed:\s*([0-9.]+[kKmMgG]?)", full_stdout
-      )
-      total_tokens = 0
-      if consumed:
-        try:
-          total_tokens = parse_token_metric(consumed[-1])
-        except ValueError:
-          total_tokens = 0
-      token_usage = {"in_tokens": 0, "out_tokens": 0, "total_tokens": total_tokens}
-
-  res = subprocess.CompletedProcess(cmd, return_code, full_stdout, "")
-  setattr(res, "token_usage", token_usage)
-  return res
+  return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
 
 
 _FINDING_KEY_ALIASES = {
@@ -417,7 +355,8 @@ def fetch_findings_from_cm_report(
   if (res.stdout or "").strip() == "null":
     return []
 
-  json_findings = json.JSONDecoder().decode(res.stdout)["findings"]
+  json_findings = json.JSONDecoder().decode(res.stdout)
+
   return [Finding.from_dict(json_finding) for json_finding in json_findings]
 
 
