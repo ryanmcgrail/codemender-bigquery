@@ -1,13 +1,12 @@
 import json
 import logging
 import os
-from pprint import pprint
 import re
 import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from finding import Finding
 
@@ -285,29 +284,6 @@ def run_command(
     raise subprocess.CalledProcessError(return_code, cmd, stdout_lines, "")
 
   return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
-
-
-_FINDING_KEY_ALIASES = {
-    "finding_id": "FindingID",
-    "session_id": "SessionID",
-    "title": "Title",
-    "file_path": "FilePath",
-    "severity": "Severity",
-    "confidence": "Confidence",
-    "analysis": "Analysis",
-    "snippet": "Snippet",
-    "vuln_type": "VulnType",
-    "vuln_id": "VulnID",
-    "fingerprint": "Fingerprint",
-    "status": "Status",
-    "source_stage": "SourceStage",
-    "finding_json": "FindingJSON",
-    "updated_at": "UpdatedAt",
-    "start_line": "StartLine",
-    "end_line": "EndLine",
-    "dismiss_reason": "DismissReason",
-    "confidence_level": "ConfidenceLevel",
-}
 
 
 class FindingImportError(RuntimeError):

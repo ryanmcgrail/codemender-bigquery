@@ -1,16 +1,8 @@
-"""Encapsulates finding data and domain logic across CodeMender BigQuery workflows.
-
-This module provides the `Finding` class, unifying finding representation,
-normalization, fingerprint generation, and transformations
-between CodeMender CLI formats and BigQuery telemetry formats.
-"""
-
 from __future__ import annotations
 
 import datetime
-import os
 import re
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 # --- Constants & Pattern Definitions ---
 
