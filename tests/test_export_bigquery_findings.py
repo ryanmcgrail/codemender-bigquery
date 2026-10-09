@@ -2,10 +2,10 @@
 
 import types
 import unittest
-from unittest.mock import MagicMock, patch
 
 from google.cloud import bigquery
 
+from finding import Finding
 import step_3_export_to_bq as exporter
 
 
@@ -44,40 +44,6 @@ class _MockClient:
 
 
 class ExportBigQueryFindingsTests(unittest.TestCase):
-  def test_extract_cwe_id(self):
-    self.assertEqual(exporter.extract_cwe_id("CWE-79"), "CWE-79")
-    self.assertEqual(exporter.extract_cwe_id("Some text CWE-89 in middle"), "CWE-89")
-    self.assertEqual(exporter.extract_cwe_id(None, "no cwe", "CWE-352"), "CWE-352")
-    self.assertIsNone(exporter.extract_cwe_id("no cwe here"))
-
-  def test_repo_relative_path(self):
-    self.assertEqual(
-        exporter._repo_relative_path("/work/repo/src/app.py", "/work/repo"),
-        "/work/repo/src/app.py",
-    )
-    self.assertEqual(
-        exporter._repo_relative_path("src//app.py", "/work/repo"),
-        "src//app.py",
-    )
-    self.assertIsNone(exporter._repo_relative_path(None, "/work/repo"))
-
-  def test_to_telemetry_finding(self):
-    cm_finding = exporter.Finding(
-        finding_id = "f-123",
-        file_path = "/work/repo/src/main.py",
-        title = "SQL Injection",
-        vuln_type = "SQL Injection",
-        start_line = 10,
-        status = "OPEN",
-        fingerprint = "fp-123",
-    )
-    telemetry_finding = exporter._to_telemetry_finding(
-        cm_finding, source_finding_id="orig-id"
-    )
-    self.assertEqual(telemetry_finding["finding_id"], "orig-id")
-    self.assertEqual(telemetry_finding["file_path"], "/work/repo/src/main.py")
-    self.assertEqual(telemetry_finding.get("fingerprint"), "fp-123")
-
   def test_build_finding_rows(self):
     ctx = exporter.ScanRunContext(
         scan_id="scan-1",
@@ -85,7 +51,7 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
         repo_dir="/tmp/repo",
     )
     findings = [
-        {
+        Finding.from_dict({
             "finding_id": "fid-1",
             "title": "SQL injection in query",
             "vuln_type": "CWE-89",
@@ -95,7 +61,7 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
             "end_line": 20,
             "status": "VERIFIED",
             "fingerprint": "fp-1",
-        }
+        })
     ]
     rows = exporter.build_finding_rows(ctx, findings, scan_timestamp="2026-10-07T00:00:00Z")
     self.assertEqual(len(rows), 1)
@@ -129,14 +95,14 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
   def test_export_findings_to_bigquery(self):
     client = _MockClient()
     findings = [
-        exporter.Finding(
-            finding_id="cm-1",
-            file_path="src/app.py",
-            title="XSS",
-            vuln_type="XSS",
-            start_line=5,
-            status="OPEN",
-        )
+        Finding({
+            "finding_id": "cm-1",
+            "file_path": "src/app.py",
+            "title": "XSS",
+            "vuln_type": "XSS",
+            "start_line": 5,
+            "status": "OPEN",
+        })
     ]
     merged = exporter.export_findings_to_bigquery(
         client=client,

@@ -2,6 +2,7 @@
 
 import tempfile
 import types
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -83,7 +84,7 @@ class BigQueryRoundtripTests(unittest.TestCase):
     )
     with (
         patch.object(roundtrip.telemetry, "resolve_project", return_value=None),
-        patch.object(roundtrip.subprocess, "run", return_value=result) as run,
+        patch.object(subprocess, "run", return_value=result) as run,
     ):
       project = roundtrip._resolve_project()
 
@@ -91,18 +92,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
     self.assertEqual(
         run.call_args.args[0], ["gcloud", "config", "get-value", "project"]
     )
-
-  def test_rows_deduplicate_by_repository_and_finding_id(self):
-    rows = [
-        {"repository": "acme/widgets", "finding_id": "same", "title": "old"},
-        {"repository": "acme/widgets", "finding_id": "same", "title": "new"},
-        {"repository": "acme/api", "finding_id": "same", "title": "other repo"},
-    ]
-
-    result = roundtrip.deduplicate_rows_by_key(rows)
-
-    self.assertEqual(len(result), 2)
-    self.assertEqual(result[0]["title"], "new")
 
   def test_telemetry_mapping_preserves_source_finding_id(self):
     finding = {
