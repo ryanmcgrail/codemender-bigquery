@@ -36,7 +36,7 @@ class CodeMender:
         target_or_id=target,
         cli_version=self.cli_version,
     )
-    result = finder.run_command(command, cwd=self.repo_dir, env=self.env, check=False)
+    result = finder.run_command(command, cwd=self.repo_dir, env=self.env, check=False, print_to_stdout=True)
     returncode = getattr(result, "returncode", 0)
     stdout = getattr(result, "stdout", "")
     if returncode and not finder.is_ci_gate_exit(returncode, stdout or ""):

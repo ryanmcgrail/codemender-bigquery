@@ -262,7 +262,7 @@ def run_command(
       env=env,
       stdin=subprocess.DEVNULL,
       stdout=subprocess.PIPE,
-      stderr=subprocess.DEVNULL,
+      stderr=subprocess.STDOUT if print_to_stdout else subprocess.DEVNULL,
       text=True,
       bufsize=1,
   )
@@ -356,13 +356,19 @@ def import_findings(
     cli_version: Optional[str] = None,
 ) -> Tuple[List[str], List[Finding]]:
   """Imports findings and returns the IDs cm assigned them."""
-  before = set(_ids(fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)))
+  before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)
+  before_ids = set(_ids(before_findings))
+
+  before_fingerprints = set([f.fingerprint for f in before_findings])
+  findings_not_already_in_cm = [f for f in findings if f.fingerprint not in before_fingerprints]
+  if len(findings_not_already_in_cm) == 0:
+    return [], [];
 
   with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_file:
     import_file = tmp_file.name
 
   try:
-    write_import_payload(findings, import_file)
+    write_import_payload(findings_not_already_in_cm, import_file)
     import_cmd = build_cm_command(
         cm_binary,
         "report",
@@ -380,7 +386,7 @@ def import_findings(
     )
 
   after_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)
-  assigned = [fid for fid in _ids(after_findings) if fid not in before]
+  assigned = [fid for fid in _ids(after_findings) if fid not in before_ids]
   if not assigned:
     raise FindingImportError(
         "'cm report import' exited 0 but the finding set is unchanged, so no"
