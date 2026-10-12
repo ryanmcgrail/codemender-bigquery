@@ -55,7 +55,6 @@ def run_roundtrip(
     dataset: str,
     table: str = DEFAULT_TABLE,
     cm_binary: Optional[str] = None,
-    cli_version: Optional[str] = None,
     location: Optional[str] = None,
     client: Any = None,
 ):
@@ -74,7 +73,6 @@ def run_roundtrip(
   cm = CodeMender(
     cm_binary = cm_binary,
     repo_dir = repo_dir,
-    cli_version = cli_version
   )
 
   _print_heading("Fetching latest findings from BigQuery...")
@@ -128,7 +126,6 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--dataset", default=resolve_dataset())
   parser.add_argument("--table", default=DEFAULT_TABLE)
   parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
-  parser.add_argument("--cli-version", default=os.environ.get("CODEMENDER_CLI_VERSION", "preview"))
   parser.add_argument("--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"))
   parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")
   args = parser.parse_args(argv)
@@ -150,7 +147,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dataset=args.dataset,
         table=args.table,
         cm_binary=args.cm_binary,
-        cli_version=args.cli_version,
         location=args.location,
     )
   except Exception as error:  # pylint: disable=broad-exception-caught

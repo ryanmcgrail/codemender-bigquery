@@ -16,12 +16,10 @@ class CodeMender:
       self,
       cm_binary: str = "cm",
       repo_dir: str = ".",
-      cli_version: Optional[str] = None,
       env: Optional[Dict[str, str]] = None,
   ) -> None:
     self.cm_binary = cm_binary
     self.repo_dir = repo_dir
-    self.cli_version = cli_version
     self.env = env
 
   def find(
@@ -34,7 +32,6 @@ class CodeMender:
         self.cm_binary,
         "find",
         target_or_id=target,
-        cli_version=self.cli_version,
     )
     result = finder.run_command(command, cwd=self.repo_dir, env=self.env, check=False, print_to_stdout=True)
     returncode = getattr(result, "returncode", 0)
@@ -51,7 +48,6 @@ class CodeMender:
         self.cm_binary,
         self.repo_dir,
         env=self.env,
-        cli_version=self.cli_version,
     )
 
   def import_findings(
@@ -64,5 +60,4 @@ class CodeMender:
         findings,
         self.repo_dir,
         env=self.env,
-        cli_version=self.cli_version,
     )

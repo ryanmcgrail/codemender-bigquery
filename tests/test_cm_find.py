@@ -30,12 +30,8 @@ class RunCodeMenderFindTests(unittest.TestCase):
         cm_binary="/usr/bin/cm",
         action="find",
         target_or_id="/tmp/repo",
-        cli_version="preview",
     )
-    self.assertEqual(cmd[0], "/usr/bin/cm")
-    self.assertEqual(cmd[1], "find")
-    self.assertIn("-y", cmd)
-    self.assertEqual(cmd[-1], "/tmp/repo")
+    self.assertEqual(cmd, ["/usr/bin/cm", "find", "/tmp/repo"])
 
   def test_build_cm_command_requires_target(self):
     with self.assertRaises(ValueError):
@@ -66,7 +62,7 @@ class RunCodeMenderFindTests(unittest.TestCase):
       self.assertNotIn("unexpected", loaded[0])
 
   def test_read_findings(self):
-    raw = json.dumps({"findings": [{"FindingID": "cm-99"}]})
+    raw = json.dumps([{"FindingID": "cm-99"}])
     proc = types.SimpleNamespace(returncode=0, stdout=raw)
     with patch.object(finder, "run_command", return_value=proc):
       findings = finder.fetch_findings_from_cm_report("cm", "/tmp/repo")
@@ -76,12 +72,12 @@ class RunCodeMenderFindTests(unittest.TestCase):
       _ = findings[0]["FindingID"]
 
   def test_import_findings(self):
-    before_raw = json.dumps({"findings": [{"FindingID": "cm-1"}]})
-    after_raw = json.dumps({"findings": [{"FindingID": "cm-1"}, {"FindingID": "cm-2"}]})
+    before_raw = json.dumps([{"FindingID": "cm-1", "Fingerprint": "fp-1"}])
+    after_raw = json.dumps([{"FindingID": "cm-1", "Fingerprint": "fp-1"}, {"FindingID": "cm-2", "Fingerprint": "fp-2"}])
     proc_before = types.SimpleNamespace(returncode=0, stdout=before_raw)
     proc_import = types.SimpleNamespace(returncode=0, stdout="Imported")
     proc_after = types.SimpleNamespace(returncode=0, stdout=after_raw)
-    to_import = [finder.Finding(finding_id="f-2", file_path="src/main.py", title="Bug")]
+    to_import = [finder.Finding(finding_id="f-2", fingerprint="fp-2", file_path="src/main.py", title="Bug")]
 
     with patch.object(finder, "run_command", side_effect=[proc_before, proc_import, proc_after]) as mock_run:
       assigned, after = finder.import_findings("cm", to_import, "/tmp/repo")

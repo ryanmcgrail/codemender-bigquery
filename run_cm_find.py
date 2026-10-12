@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -26,206 +25,26 @@ def is_ci_gate_exit(returncode: int, find_stdout: str) -> bool:
   )
 
 
-_HELP_FLAG_LINE = re.compile(
-    r"^\s*(?:-(?P<short>[A-Za-z0-9]),\s+)?--(?P<long>[A-Za-z0-9][\w-]*)"
-    r"(?P<value> (?![ -])\S+)?"
-)
-_SUPPORTED_FLAGS_CACHE: Dict[Tuple[str, str], Optional[Dict[str, bool]]] = {}
-_RESERVED_FLAGS = frozenset({"--model", "--unrestricted"})
-_BLOCKED_FLAGS = frozenset({"-h", "--help"})
-
-
-def resolve_command_model(command_name: str) -> Optional[str]:
-  """Implements model precedence hierarchy: CODEMENDER_<COMMAND>_MODEL > CODEMENDER_MODEL > None."""
-  cmd_override = (
-      os.environ.get(f"CODEMENDER_{command_name.upper()}_MODEL") or ""
-  ).strip()
-  if cmd_override:
-    return cmd_override
-  model = (os.environ.get("CODEMENDER_MODEL") or "").strip()
-  return model or None
-
-
-def parse_help_flags(help_text: str) -> Dict[str, bool]:
-  """Parses `cm <action> --help` output into {flag: takes_value}."""
-  flags: Dict[str, bool] = {}
-  in_flags = False
-  for line in (help_text or "").splitlines():
-    stripped = line.strip()
-    if stripped.endswith("Flags:"):
-      in_flags = True
-      continue
-    if not in_flags or not stripped.startswith("-"):
-      continue
-    match = _HELP_FLAG_LINE.match(line)
-    if not match:
-      continue
-    value = (match.group("value") or "").strip()
-    takes_value = bool(value) and "[=" not in value
-    flags[f"--{match.group('long')}"] = takes_value
-    if match.group("short"):
-      flags[f"-{match.group('short')}"] = takes_value
-  return flags
-
-
-def get_supported_cm_flags(
-    cm_binary: str, action: str, env: Optional[Dict[str, str]] = None
-) -> Optional[Dict[str, bool]]:
-  """Returns the flags `cm <action>` accepts, or None when help is unavailable."""
-  key = (cm_binary, action)
-  if key in _SUPPORTED_FLAGS_CACHE:
-    return _SUPPORTED_FLAGS_CACHE[key]
-  flags: Optional[Dict[str, bool]] = None
-  try:
-    res = subprocess.run(
-        [cm_binary, action, "--help"],
-        env=env,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    parsed = parse_help_flags((res.stdout or "") + "\n" + (res.stderr or ""))
-    flags = parsed or None
-  except (OSError, subprocess.SubprocessError) as e:
-    logger.warning("Could not read '%s %s --help': %s", cm_binary, action, e)
-  _SUPPORTED_FLAGS_CACHE[key] = flags
-  return flags
-
-
-def filter_supported_flags(
-    flags: List[str], supported: Optional[Dict[str, bool]], action: str
-) -> List[str]:
-  """Drops configured flags that must not or cannot be passed to cm."""
-  kept: List[str] = []
-  i = 0
-  while i < len(flags):
-    token = flags[i]
-    i += 1
-    if not token.startswith("-"):
-      continue
-    name = token.split("=", 1)[0]
-    takes_value = supported.get(name) if supported is not None else None
-    if "=" in token or takes_value is False:
-      has_separate_value = False
-    elif takes_value:
-      has_separate_value = i < len(flags)
-      if not has_separate_value and name not in _RESERVED_FLAGS:
-        continue
-    else:
-      has_separate_value = i < len(flags) and not flags[i].startswith("-")
-    if name in _BLOCKED_FLAGS:
-      if has_separate_value:
-        i += 1
-      continue
-    if name in _RESERVED_FLAGS or (supported is not None and takes_value is None):
-      if has_separate_value:
-        i += 1
-      continue
-    kept.append(token)
-    if has_separate_value:
-      kept.append(flags[i])
-      i += 1
-  return kept
-
-
-def resolve_command_flags(command_name: str) -> List[str]:
-  """Extra cm flags configured for one command via CODEMENDER_<COMMAND>_FLAGS."""
-  raw = (os.environ.get(f"CODEMENDER_{command_name.upper()}_FLAGS") or "").strip()
-  if not raw:
-    return []
-  try:
-    return shlex.split(raw)
-  except ValueError:
-    return []
-
-
 def build_cm_command(
     cm_binary: str,
     action: str,
     target_or_id: Optional[str] = None,
-    cli_version: Optional[str] = None,
     extra_flags: Optional[List[str]] = None,
 ) -> List[str]:
   """Centralized command builder for CodeMender CLI invocations."""
-  if cli_version is None:
-    cli_version = os.environ.get("CODEMENDER_CLI_VERSION", "preview").lower()
-  else:
-    cli_version = cli_version.lower()
-
-  if action in ["find", "verify", "fix"] and not target_or_id:
+  if action == "find" and not target_or_id:
     raise ValueError(f"Action '{action}' requires a valid target or finding ID.")
 
-  if cli_version == "preview":
-    model = resolve_command_model(action)
-    model_flags = ["--model", model] if model else []
-    unrestricted_flag = (
-        ["--unrestricted"]
-        if os.environ.get("CODEMENDER_SANDBOX_ENABLED", "true").strip().lower()
-        in ("false", "0", "no", "off")
-        else []
-    )
-    passthrough_flags: List[str] = []
-    if action in ("find", "verify", "fix"):
-      requested = list(extra_flags or []) + resolve_command_flags(action)
-      if requested:
-        passthrough_flags = filter_supported_flags(
-            requested, get_supported_cm_flags(cm_binary, action), action
-        )
-
-    if action == "find":
-      cmd = (
-          [cm_binary, "find", "-y"]
-          + model_flags
-          + passthrough_flags
-          + [target_or_id]
-      )
-    elif action == "verify":
-      skip_flag = (
-          ["--skip-exploit-verification"]
-          if os.environ.get("CODEMENDER_SKIP_EXPLOIT_VERIFICATION", "").lower() == "true"
-          else []
-      )
-      cmd = (
-          [cm_binary, "verify", "-y", "--bypass-warning"]
-          + unrestricted_flag
-          + model_flags
-          + skip_flag
-          + passthrough_flags
-          + [target_or_id]
-      )
-    elif action == "fix":
-      cmd = (
-          [cm_binary, "fix", "-y", "--bypass-warning"]
-          + unrestricted_flag
-          + model_flags
-          + passthrough_flags
-          + [target_or_id]
-      )
-    elif action == "init":
-      cmd = [cm_binary, "init"]
-      if extra_flags:
-        cmd.extend(extra_flags)
-    else:
-      cmd = [cm_binary, action]
-      if extra_flags:
-        cmd.extend(extra_flags)
+  if action == "find":
+    cmd = [cm_binary, "find", target_or_id]
+  elif action == "init":
+    cmd = [cm_binary, "init"]
+    if extra_flags:
+      cmd.extend(extra_flags)
   else:
-    if action == "find":
-      cmd = [cm_binary, "find", target_or_id]
-    elif action == "verify":
-      cmd = [cm_binary, "find", "verify", target_or_id, "--yes"]
-    elif action == "fix":
-      cmd = [cm_binary, "fix", target_or_id, "--yes"]
-    elif action == "init":
-      cmd = [cm_binary, "init"]
-      if extra_flags:
-        cmd.extend(extra_flags)
-    else:
-      cmd = [cm_binary, action]
-      if extra_flags:
-        cmd.extend(extra_flags)
+    cmd = [cm_binary, action]
+    if extra_flags:
+      cmd.extend(extra_flags)
   return cmd
 
 
@@ -289,14 +108,12 @@ def fetch_findings_from_cm_report(
     cm_binary: str,
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
-    cli_version: Optional[str] = None,
 ) -> List[Finding]:
   """Returns every finding currently in the CodeMender state."""
   report_cmd = build_cm_command(
       cm_binary,
       "report",
       extra_flags=["--format", "json"],
-      cli_version=cli_version,
   )
   res = run_command(
       report_cmd,
@@ -336,10 +153,9 @@ def import_findings(
     findings: Sequence[Finding],
     repo_dir: str,
     env: Optional[Dict[str, str]] = None,
-    cli_version: Optional[str] = None,
 ) -> Tuple[List[str], List[Finding]]:
   """Imports findings and returns the IDs cm assigned them."""
-  before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)
+  before_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env)
   before_ids = set(_ids(before_findings))
 
   before_fingerprints = set([f.fingerprint for f in before_findings])
@@ -356,7 +172,6 @@ def import_findings(
         cm_binary,
         "report",
         extra_flags=["import", "-f", import_file, "-p", repo_dir],
-        cli_version=cli_version,
     )
     import_res = run_command(import_cmd, cwd=repo_dir, env=env, check=False)
   finally:
@@ -368,7 +183,7 @@ def import_findings(
         f"'cm report import' exited {import_res.returncode}"
     )
 
-  after_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env, cli_version)
+  after_findings = fetch_findings_from_cm_report(cm_binary, repo_dir, env)
   assigned = [fid for fid in _ids(after_findings) if fid not in before_ids]
   if not assigned:
     raise FindingImportError(
