@@ -2,18 +2,34 @@ import argparse
 import logging
 import os
 import shutil
+import subprocess
 import sys
 from typing import Any, Iterable, Optional, Sequence
 
-from bigquery import (
-    BigQuery,
-    DEFAULT_TABLE,
-    _resolve_project,
-)
+from bigquery import BigQuery
 from codemender import CodeMender
 from finding import Finding
 
 logger = logging.getLogger("codemender-bigquery-roundtrip")
+
+
+def _resolve_project() -> Optional[str]:
+  """Resolves the GCP project from environment or active gcloud configuration."""
+  project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+  if project:
+    return project
+  try:
+    result = subprocess.run(
+        ["gcloud", "config", "get-value", "project"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+  except (OSError, subprocess.SubprocessError):
+    return None
+  project = (result.stdout or "").strip()
+  return project if result.returncode == 0 and project and project != "(unset)" else None
 
 
 def _print_heading(title: str):
@@ -37,7 +53,7 @@ def run_roundtrip(
     repo_dir: str,
     project: str,
     dataset: str,
-    table: str = DEFAULT_TABLE,
+    table: Optional[str] = None,
     cm_binary: Optional[str] = None,
     location: Optional[str] = None,
     client: Any = None,
@@ -100,7 +116,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
   parser.add_argument("--project", default=_resolve_project())
   parser.add_argument("--dataset", required=True)
-  parser.add_argument("--table", default=DEFAULT_TABLE)
+  parser.add_argument("--table", default=None)
   parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
   parser.add_argument("--location", default=None)
   parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")

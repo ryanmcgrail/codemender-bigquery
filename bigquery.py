@@ -3,9 +3,7 @@
 import dataclasses
 import datetime
 import logging
-import os
 import re
-import subprocess
 from typing import Any, Dict, Iterable, List, Optional
 import uuid
 
@@ -13,13 +11,8 @@ from finding import Finding
 
 logger = logging.getLogger("bigquery")
 
-_PROJECT_FALLBACK_ENV_KEYS = (
-    "GOOGLE_CLOUD_PROJECT",
-    "GOOGLE_CLOUD_PROJECT_ID",
-    "GCLOUD_PROJECT",
-)
 
-DEFAULT_TABLE = "findings"
+_DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _FIXED_STATUSES = frozenset({"FIXED", "REMEDIATED", "PATCHED"})
@@ -27,34 +20,6 @@ _FAILED_FIX_STATUSES = frozenset({"FIX_FAILED", "PR_CREATION_FAILED", "PATCH_FAI
 _VERIFIED_STATUSES = frozenset({"VERIFIED", "CONFIRMED"})
 _VERIFY_PASSED_STATUSES = _VERIFIED_STATUSES | _FIXED_STATUSES | _FAILED_FIX_STATUSES
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
-
-
-def resolve_project() -> Optional[str]:
-  """Returns the BigQuery project from environment variables, or None."""
-  for key in _PROJECT_FALLBACK_ENV_KEYS:
-    value = (os.environ.get(key) or "").strip()
-    if value:
-      return value
-  return None
-
-
-def _resolve_project() -> Optional[str]:
-  """Resolves the GCP project from environment or active gcloud configuration."""
-  project = resolve_project()
-  if project:
-    return project
-  try:
-    result = subprocess.run(
-        ["gcloud", "config", "get-value", "project"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
-    )
-  except (OSError, subprocess.SubprocessError):
-    return None
-  project = (result.stdout or "").strip()
-  return project if result.returncode == 0 and project and project != "(unset)" else None
 
 
 def _table_id(project: str, dataset: str, table: str) -> str:
@@ -249,7 +214,7 @@ class BigQuery:
       self,
       project: str,
       dataset: str,
-      table: str = DEFAULT_TABLE,
+      table: str = _DEFAULT_TABLE,
       location: Optional[str] = None,
       client: Any = None,
   ) -> None:
