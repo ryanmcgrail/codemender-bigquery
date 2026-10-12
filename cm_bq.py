@@ -3,30 +3,15 @@ import logging
 import os
 import shutil
 import sys
-from typing import Any, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
-from codemender import CodeMender
-from import_from_bq import (
+from bigquery import (
+    BigQuery,
     DEFAULT_TABLE,
     _resolve_project,
-    _table_id,
-    ensure_dataset,
-    fetch_findings_from_bigquery,
-    resolve_project,
 )
-from upload_to_bq import (
-    ScanRunContext,
-    build_finding_rows,
-    export_findings_to_bigquery,
-)
-
-
-import types
-telemetry = types.SimpleNamespace(
-    resolve_project=resolve_project,
-    ScanRunContext=ScanRunContext,
-    build_finding_rows=build_finding_rows,
-)
+from codemender import CodeMender
+from finding import Finding
 
 logger = logging.getLogger("codemender-bigquery-roundtrip")
 
@@ -37,6 +22,7 @@ def _print_heading(title: str):
   print("## " + title)
   print("#########################")
   print()
+
 
 def _print_findings(findings: Iterable[Finding]):
   sorted_findings = sorted(findings, key=lambda finding: finding.fingerprint)
@@ -56,31 +42,30 @@ def run_roundtrip(
     location: Optional[str] = None,
     client: Any = None,
 ):
-  """Runs the BigQuery -> cm import/verify/fix -> BigQuery round trip."""
+  """Runs the BigQuery -> cm import/find -> BigQuery round trip."""
   if not os.path.isdir(repo_dir):
     raise ValueError(f"Repository directory does not exist: {repo_dir}")
   if not repository.strip():
     raise ValueError("Repository name must not be empty")
-  table_id = _table_id(project, dataset, table)
 
-  if client is None:
-    from google.cloud import bigquery  # pylint: disable=import-outside-toplevel
-
-    client = bigquery.Client(project=project)
-
+  bq = BigQuery(
+      project=project,
+      dataset=dataset,
+      table=table,
+      location=location,
+      client=client,
+  )
   cm = CodeMender(
-    cm_binary = cm_binary,
-    repo_dir = repo_dir,
+      cm_binary=cm_binary,
+      repo_dir=repo_dir,
   )
 
   _print_heading("Fetching latest findings from BigQuery...")
 
-  ensure_dataset(client, project, dataset, location)
+  bq.ensure_dataset()
 
   print("BigQuery findings:")
-  bq_findings = fetch_findings_from_bigquery(
-      client, table_id, repository, location=location
-  )
+  bq_findings = bq.fetch_findings(repository)
   _print_findings(bq_findings)
   print()
 
@@ -99,18 +84,13 @@ def run_roundtrip(
 
   _print_heading("Uploading findings to BigQuery...")
   cm_findings_after_find = cm.list_findings()
-  export_findings_to_bigquery(
-      client=client,
-      table_id=table_id,
+  bq.upload_findings(
       findings=cm_findings_after_find,
       repository=repository,
       repo_dir=repo_dir,
-      location=location,
   )
 
-  bq_findings_after_upload = fetch_findings_from_bigquery(
-      client, table_id, repository, location=location
-  )
+  bq_findings_after_upload = bq.fetch_findings(repository)
 
   print("BigQuery findings after upload:")
   _print_findings(bq_findings_after_upload)
@@ -138,7 +118,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   logging.basicConfig(level=logging.ERROR, format="%(levelname)s %(message)s")
   args = _parse_args(argv)
   try:
-    summary = run_roundtrip(
+    run_roundtrip(
         repository=args.repository,
         repo_dir=os.path.abspath(os.path.expanduser(args.repo_dir)),
         project=args.project,
