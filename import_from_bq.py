@@ -9,10 +9,6 @@ from finding import Finding
 logger = logging.getLogger("fetch-bigquery-findings")
 
 # --- Environment & Configuration Keys ---
-ENV_DATASET = "CODEMENDER_BQ_DATASET"
-ENV_PROJECT = "CODEMENDER_BQ_PROJECT"
-ENV_LOCATION = "CODEMENDER_BQ_LOCATION"
-
 _PROJECT_FALLBACK_ENV_KEYS = (
     "GOOGLE_CLOUD_PROJECT",
     "GOOGLE_CLOUD_PROJECT_ID",
@@ -23,16 +19,8 @@ DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def resolve_dataset() -> Optional[str]:
-  """Returns the configured BigQuery dataset name from environment, or None."""
-  return (os.environ.get(ENV_DATASET) or "").strip() or None
-
-
 def resolve_project() -> Optional[str]:
   """Returns the BigQuery project from environment variables, or None."""
-  explicit = (os.environ.get(ENV_PROJECT) or "").strip()
-  if explicit:
-    return explicit
   for key in _PROJECT_FALLBACK_ENV_KEYS:
     value = (os.environ.get(key) or "").strip()
     if value:

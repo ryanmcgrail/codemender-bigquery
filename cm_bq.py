@@ -12,7 +12,6 @@ from import_from_bq import (
     _table_id,
     ensure_dataset,
     fetch_findings_from_bigquery,
-    resolve_dataset,
     resolve_project,
 )
 from upload_to_bq import (
@@ -25,7 +24,6 @@ from upload_to_bq import (
 import types
 telemetry = types.SimpleNamespace(
     resolve_project=resolve_project,
-    resolve_dataset=resolve_dataset,
     ScanRunContext=ScanRunContext,
     build_finding_rows=build_finding_rows,
 )
@@ -123,16 +121,16 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
   parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
   parser.add_argument("--project", default=_resolve_project())
-  parser.add_argument("--dataset", default=resolve_dataset())
+  parser.add_argument("--dataset", required=True)
   parser.add_argument("--table", default=DEFAULT_TABLE)
   parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
-  parser.add_argument("--location", default=os.environ.get("CODEMENDER_BQ_LOCATION"))
+  parser.add_argument("--location", default=None)
   parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")
   args = parser.parse_args(argv)
   if not args.project:
-    parser.error("--project or CODEMENDER_BQ_PROJECT/GOOGLE_CLOUD_PROJECT is required")
+    parser.error("--project or GOOGLE_CLOUD_PROJECT is required")
   if not args.dataset:
-    parser.error("--dataset or CODEMENDER_BQ_DATASET is required")
+    parser.error("--dataset is required")
   return args
 
 
