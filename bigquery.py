@@ -214,15 +214,16 @@ class BigQuery:
       self,
       project: str,
       dataset: str,
-      table: str = _DEFAULT_TABLE,
+      table: Optional[str],
       location: Optional[str] = None,
       client: Any = None,
   ) -> None:
     self.project = project
     self.dataset = dataset
-    self.table = table
+    self.table = table or _DEFAULT_TABLE
     self.location = location
-    self.table_id = _table_id(project, dataset, table)
+    self.table_id = _table_id(project, dataset, self.table)
+
     if client is None:
       from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
 
