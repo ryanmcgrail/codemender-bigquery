@@ -6,7 +6,7 @@ import sys
 from typing import Any, Optional, Sequence
 
 from codemender import CodeMender
-from step_1_import_from_bq import (
+from import_from_bq import (
     DEFAULT_TABLE,
     _resolve_project,
     _table_id,
@@ -15,7 +15,7 @@ from step_1_import_from_bq import (
     resolve_dataset,
     resolve_project,
 )
-from step_3_export_to_bq import (
+from upload_to_bq import (
     ScanRunContext,
     build_finding_rows,
     export_findings_to_bigquery,

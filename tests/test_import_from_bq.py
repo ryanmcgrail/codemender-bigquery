@@ -4,7 +4,7 @@ import types
 import unittest
 from unittest.mock import patch, MagicMock
 
-import step_1_import_from_bq as fetcher
+import import_from_bq as fetcher
 
 
 class FetchBigQueryFindingsTests(unittest.TestCase):

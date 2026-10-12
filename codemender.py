@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from finding import Finding
-import step_2_cm_find as finder
+import run_cm_find as finder
 
 logger = logging.getLogger("codemender")
 
