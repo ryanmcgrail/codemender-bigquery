@@ -2,19 +2,10 @@
 
 import unittest
 
-from finding import (
-    Finding,
-    extract_cwe_id,
-)
+from finding import Finding
 
 
 class FindingTests(unittest.TestCase):
-
-  def test_extract_cwe_id(self):
-    self.assertEqual(extract_cwe_id("CWE-79: Cross-site Scripting"), "CWE-79")
-    self.assertEqual(extract_cwe_id("Insecure code", "cwe-89"), "CWE-89")
-    self.assertIsNone(extract_cwe_id("no cwe here"))
-    self.assertIsNone(extract_cwe_id(None, ""))
 
   def test_from_dict_and_to_dict(self):
     data = {
@@ -38,7 +29,6 @@ class FindingTests(unittest.TestCase):
     self.assertEqual(f.start_line, 15)
     self.assertEqual(f.end_line, 20)
     self.assertEqual(f.title, "Hardcoded Secret")
-    self.assertEqual(f.cwe_id, "CWE-798")
     self.assertEqual(f.severity, "HIGH")
     self.assertEqual(f.status, "DETECTED")
     self.assertEqual(f.analysis, "Secret key found in source")
@@ -56,14 +46,10 @@ class FindingTests(unittest.TestCase):
     )
     rec = f.to_cm_import_record()
     self.assertEqual(rec["file_path"], "src/main.py")
-    self.assertEqual(rec["line"], 10)
+    self.assertEqual(rec["start_line"], 10)
     self.assertEqual(rec["title"], "XSS")
     self.assertEqual(rec["severity"], "HIGH")
-    self.assertEqual(rec["message"], "XSS vulnerability")
-
-    empty_path_finding = Finding(finding_id="f-2", file_path="")
-    with self.assertRaises(ValueError):
-      empty_path_finding.to_cm_import_record()
+    self.assertEqual(rec["analysis"], "XSS vulnerability")
 
   def test_property_access_and_no_dict_protocol(self):
     f = Finding(

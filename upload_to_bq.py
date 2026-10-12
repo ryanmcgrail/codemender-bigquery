@@ -1,7 +1,6 @@
 import dataclasses
 import datetime
 import logging
-import re
 from typing import Any, Dict, Iterable, List, Optional
 import uuid
 
@@ -15,9 +14,6 @@ _VERIFIED_STATUSES = frozenset({"VERIFIED", "CONFIRMED"})
 _VERIFY_PASSED_STATUSES = _VERIFIED_STATUSES | _FIXED_STATUSES | _FAILED_FIX_STATUSES
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
 
-_CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
-_TRUTHY = frozenset({"true", "1", "yes", "on"})
-
 
 def _as_str(value: Any) -> Optional[str]:
   """Coerces a value to a non-empty string, or None."""
@@ -28,49 +24,9 @@ def _as_str(value: Any) -> Optional[str]:
   return text or None
 
 
-def _as_int(value: Any) -> Optional[int]:
-  """Coerces a value to int, returning None rather than raising."""
-  if value is None or isinstance(value, bool):
-    return int(value) if isinstance(value, bool) else None
-  try:
-    return int(value)
-  except (TypeError, ValueError):
-    return None
-
-
-def _as_bool(value: Any) -> Optional[bool]:
-  """Coerces a 0/1/'true' style value to bool, or None."""
-  if value is None:
-    return None
-  if isinstance(value, bool):
-    return value
-  if isinstance(value, (int, float)):
-    return bool(value)
-  text = _as_str(value)
-  if text is None:
-    return None
-  return text.lower() in _TRUTHY
-
-
 def _utc_now_iso() -> str:
   """Returns the current UTC time as an RFC 3339 string BigQuery accepts."""
   return datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-
-def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
-  """Extracts a normalized `CWE-nnn` identifier from any of the given strings."""
-  for candidate in candidates:
-    if not candidate:
-      continue
-    match = _CWE_PATTERN.search(str(candidate))
-    if match:
-      return match.group(1).upper()
-  return None
-
-
-def _repo_relative_path(raw_path: Any, repo_dir: Optional[str] = None) -> Optional[str]:
-  """Returns a finding's file path as-is."""
-  return _as_str(raw_path)
 
 
 def _row_verified(
@@ -122,7 +78,6 @@ def build_finding_rows(
     ctx: ScanRunContext,
     findings: Iterable[Finding],
     scan_timestamp: Optional[str] = None,
-    finding_prs: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
   if not findings:
@@ -131,8 +86,6 @@ def build_finding_rows(
   timestamp = scan_timestamp or _utc_now_iso()
   scan_id = _as_str(ctx.scan_id) or "unknown"
   repository = _as_str(ctx.repository)
-  prs = finding_prs or {}
-  repo_dir = _as_str(ctx.repo_dir)
   wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
 
   rows: List[Dict[str, Any]] = []
@@ -153,10 +106,9 @@ def build_finding_rows(
         "repository": repository,
         "title": title,
         "vuln_type": vuln_type,
-        "cwe_id": finding.cwe_id,
         "severity": finding.severity,
         "confidence_level": finding.confidence_level,
-        "file_path": _repo_relative_path(finding.file_path, repo_dir),
+        "file_path": finding.file_path,
         "start_line": finding.start_line,
         "end_line": finding.end_line,
         "status": status,
@@ -165,9 +117,6 @@ def build_finding_rows(
         "muted": finding.muted,
         "mute_reason": finding.mute_reason,
         "fingerprint": finding.fingerprint,
-        "fix_pr_url": _as_str(prs.get(finding_id)) or finding.fix_pr_url,
-        "patch_status": finding.patch_status,
-        "finding_source": "wiz" if finding_id in wiz_ids else "codemender",
         "analysis": finding.analysis,
         "snippet": finding.snippet,
     }
@@ -211,7 +160,6 @@ def export_findings_to_bigquery(
         bigquery.SchemaField("repository", "STRING"),
         bigquery.SchemaField("title", "STRING"),
         bigquery.SchemaField("vuln_type", "STRING"),
-        bigquery.SchemaField("cwe_id", "STRING"),
         bigquery.SchemaField("severity", "STRING"),
         bigquery.SchemaField("confidence_level", "STRING"),
         bigquery.SchemaField("file_path", "STRING"),
@@ -223,11 +171,8 @@ def export_findings_to_bigquery(
         bigquery.SchemaField("muted", "BOOLEAN"),
         bigquery.SchemaField("mute_reason", "STRING"),
         bigquery.SchemaField("fingerprint", "STRING"),
-        bigquery.SchemaField("fix_pr_url", "STRING"),
-        bigquery.SchemaField("patch_status", "STRING"),
         bigquery.SchemaField("analysis", "STRING"),
         bigquery.SchemaField("snippet", "STRING"),
-        bigquery.SchemaField("finding_source", "STRING"),
     ]
     table = bigquery.Table(table_id, schema=schema)
     table.time_partitioning = bigquery.TimePartitioning(

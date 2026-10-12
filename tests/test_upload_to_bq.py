@@ -43,23 +43,6 @@ class _MockClient:
 
 
 class ExportBigQueryFindingsTests(unittest.TestCase):
-  def test_extract_cwe_id(self):
-    self.assertEqual(exporter.extract_cwe_id("CWE-79"), "CWE-79")
-    self.assertEqual(exporter.extract_cwe_id("Some text CWE-89 in middle"), "CWE-89")
-    self.assertEqual(exporter.extract_cwe_id(None, "no cwe", "CWE-352"), "CWE-352")
-    self.assertIsNone(exporter.extract_cwe_id("no cwe here"))
-
-  def test_repo_relative_path(self):
-    self.assertEqual(
-        exporter._repo_relative_path("/work/repo/src/app.py", "/work/repo"),
-        "/work/repo/src/app.py",
-    )
-    self.assertEqual(
-        exporter._repo_relative_path("src//app.py", "/work/repo"),
-        "src//app.py",
-    )
-    self.assertIsNone(exporter._repo_relative_path(None, "/work/repo"))
-
   def test_build_finding_rows(self):
     ctx = exporter.ScanRunContext(
         scan_id="scan-1",
@@ -85,13 +68,15 @@ class ExportBigQueryFindingsTests(unittest.TestCase):
     self.assertEqual(row["finding_id"], "fid-1")
     self.assertEqual(row["scan_id"], "scan-1")
     self.assertEqual(row["repository"], "acme/widgets")
-    self.assertEqual(row["cwe_id"], "CWE-89")
     self.assertEqual(row["severity"], "HIGH")
     self.assertEqual(row["start_line"], 15)
     self.assertEqual(row["status"], "VERIFIED")
     self.assertEqual(row["fingerprint"], "fp-1")
     self.assertTrue(row["verified"])
-    self.assertEqual(row["finding_source"], "codemender")
+    self.assertNotIn("cwe_id", row)
+    self.assertNotIn("fix_pr_url", row)
+    self.assertNotIn("patch_status", row)
+    self.assertNotIn("finding_source", row)
 
   def test_export_findings_to_bigquery(self):
     client = _MockClient()

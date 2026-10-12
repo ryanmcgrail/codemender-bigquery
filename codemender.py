@@ -90,28 +90,11 @@ def run_command(
   return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
 
 
-IMPORTED_FINDING_FIELDS = (
-    "file_path",
-    "line",
-    "end_line",
-    "title",
-    "message",
-    "severity",
-    "vuln_type",
-    "snippet",
-)
-
-
 def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
   """Writes a simple-JSON import payload, keeping only recognized fields."""
   payload = []
   for f in findings:
-    if isinstance(f, Finding):
-      payload.append(f.to_cm_import_record())
-    elif hasattr(f, "__getitem__"):
-      payload.append({k: f[k] for k in IMPORTED_FINDING_FIELDS if k in f})
-    else:
-      payload.append({k: getattr(f, k) for k in IMPORTED_FINDING_FIELDS if hasattr(f, k)})
+    payload.append(f.to_cm_import_record())
   os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
   with open(dest_path, "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)

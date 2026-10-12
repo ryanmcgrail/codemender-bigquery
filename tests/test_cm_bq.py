@@ -63,9 +63,9 @@ class BigQueryRoundtripTests(unittest.TestCase):
     record = finding.to_cm_import_record()
 
     self.assertEqual(record["file_path"], "src/db.py")
-    self.assertEqual(record["line"], 12)
+    self.assertEqual(record["start_line"], 12)
     self.assertEqual(record["end_line"], 14)
-    self.assertEqual(record["message"], "Untrusted input reaches a query.")
+    self.assertEqual(record["analysis"], "Untrusted input reaches a query.")
     self.assertEqual(record["snippet"], "query(user_input)")
     self.assertNotIn("fingerprint", record)
 

@@ -40,17 +40,17 @@ class CodeMenderTests(unittest.TestCase):
 
   def test_write_import_payload(self):
     findings = [
-        {
+        Finding.from_dict({
             "file_path": "src/main.py",
-            "line": 10,
+            "start_line": 10,
             "end_line": 12,
             "title": "Bug",
-            "message": "Bad code",
+            "analysis": "Bad code",
             "severity": "HIGH",
             "vuln_type": "Injection",
             "snippet": "code()",
             "unexpected": "ignore",
-        }
+        })
     ]
     with tempfile.TemporaryDirectory() as tmpdir:
       dest = os.path.join(tmpdir, "payload.json")

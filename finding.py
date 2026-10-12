@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, Mapping, Optional
 
 # --- Constants & Pattern Definitions ---
 
-_CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
 _TRUTHY = frozenset({"true", "1", "yes", "on"})
 
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
@@ -34,23 +32,8 @@ _FINDING_KEY_ALIASES = {
 
 # Reverse aliases: PascalCase -> snake_case
 _PASCAL_TO_SNAKE = {v: k for k, v in _FINDING_KEY_ALIASES.items()}
-_PASCAL_TO_SNAKE["Line"] = "start_line"
-_PASCAL_TO_SNAKE["line"] = "start_line"
-_PASCAL_TO_SNAKE["Message"] = "analysis"
-_PASCAL_TO_SNAKE["message"] = "analysis"
 _PASCAL_TO_SNAKE["confidence"] = "confidence_level"
 _PASCAL_TO_SNAKE["Confidence"] = "confidence_level"
-
-IMPORTED_FINDING_FIELDS = (
-    "file_path",
-    "line",
-    "end_line",
-    "title",
-    "message",
-    "severity",
-    "vuln_type",
-    "snippet",
-)
 
 
 # --- Helper Conversion Functions ---
@@ -87,17 +70,6 @@ def _as_bool(value: Any) -> Optional[bool]:
   if text is None:
     return None
   return text.lower() in _TRUTHY
-
-
-def extract_cwe_id(*candidates: Optional[str]) -> Optional[str]:
-  """Extracts a normalized `CWE-nnn` identifier from candidates."""
-  for candidate in candidates:
-    if not candidate:
-      continue
-    match = _CWE_PATTERN.search(str(candidate))
-    if match:
-      return match.group(1).upper()
-  return None
 
 
 # --- Main Finding Class ---
@@ -151,11 +123,7 @@ class Finding:
 
   @property
   def start_line(self) -> Optional[int]:
-    return _as_int(self._get("start_line", "StartLine", "line", "Line"))
-
-  @property
-  def line(self) -> Optional[int]:
-    return self.start_line
+    return _as_int(self._get("start_line", "StartLine"))
 
   @property
   def end_line(self) -> Optional[int]:
@@ -172,13 +140,6 @@ class Finding:
   @property
   def vuln_id(self) -> Optional[str]:
     return _as_str(self._get("vuln_id", "VulnID"))
-
-  @property
-  def cwe_id(self) -> Optional[str]:
-    val = _as_str(self._get("cwe_id", "CweID"))
-    if val:
-      return val
-    return extract_cwe_id(self.vuln_id, self.vuln_type, self.title)
 
   @property
   def severity(self) -> Optional[str]:
@@ -224,24 +185,8 @@ class Finding:
     return _as_str(self._get("fingerprint", "Fingerprint"))
 
   @property
-  def fix_pr_url(self) -> Optional[str]:
-    return _as_str(self._get("fix_pr_url", "FixPrUrl", "fix_pr", "FixPr"))
-
-  @property
-  def patch_status(self) -> Optional[str]:
-    return _as_str(self._get("patch_status", "PatchStatus"))
-
-  @property
-  def finding_source(self) -> Optional[str]:
-    return _as_str(self._get("finding_source", "FindingSource")) or "codemender"
-
-  @property
   def analysis(self) -> Optional[str]:
-    return _as_str(self._get("analysis", "Analysis", "message", "Message"))
-
-  @property
-  def message(self) -> Optional[str]:
-    return self.analysis
+    return _as_str(self._get("analysis", "Analysis"))
 
   @property
   def snippet(self) -> Optional[str]:
@@ -278,24 +223,16 @@ class Finding:
 
   def to_cm_import_record(self) -> Dict[str, Any]:
     """Converts finding to simple-JSON record accepted by CodeMender import."""
-    if not self.file_path:
-      raise ValueError("A BigQuery finding without file_path cannot be imported")
-
-    title = self.title or self.vuln_type or "CodeMender finding"
-    record: Dict[str, Any] = {
+    return {
+        "analysis": self.analysis,
         "file_path": self.file_path,
-        "title": title,
-        "message": self.analysis or "Imported from CodeMender BigQuery findings.",
-        "severity": self.severity or "MEDIUM",
-        "vuln_type": self.vuln_type or self.cwe_id or title,
+        "end_line": self.end_line,
+        "start_line": self.start_line,
+        "severity": self.severity,
+        "snippet": self.snippet,
+        "title": self.title,
+        "vuln_type": self.vuln_type,
     }
-    if self.start_line is not None:
-      record["line"] = self.start_line
-    if self.end_line is not None:
-      record["end_line"] = self.end_line
-    if self.snippet:
-      record["snippet"] = self.snippet
-    return record
 
   def __repr__(self) -> str:
     return f"Finding(finding_id={self.finding_id!r}, file_path={self.file_path!r}, status={self.status!r})"
