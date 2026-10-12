@@ -71,49 +71,12 @@ class Finding:
   # --- Properties ---
 
   @property
-  def raw(self) -> Dict[str, Any]:
-    return self._raw
+  def analysis(self) -> Optional[str]:
+    return _as_str(self._get("analysis"))
 
   @property
-  def raw_data(self) -> Dict[str, Any]:
-    return self._raw
-
-  @property
-  def finding_id(self) -> Optional[str]:
-    return _as_str(self._get("finding_id"))
-
-  @property
-  def repository(self) -> Optional[str]:
-    return _as_str(self._get("repository"))
-
-  @property
-  def file_path(self) -> Optional[str]:
-    return _as_str(self._get("file_path"))
-
-  @property
-  def start_line(self) -> Optional[int]:
-    return _as_int(self._get("start_line"))
-
-  @property
-  def end_line(self) -> Optional[int]:
-    return _as_int(self._get("end_line"))
-
-  @property
-  def title(self) -> Optional[str]:
-    return _as_str(self._get("title"))
-
-  @property
-  def vuln_type(self) -> Optional[str]:
-    return _as_str(self._get("vuln_type"))
-
-  @property
-  def vuln_id(self) -> Optional[str]:
-    return _as_str(self._get("vuln_id"))
-
-  @property
-  def severity(self) -> Optional[str]:
-    val = _as_str(self._get("severity"))
-    return val.upper() if val else None
+  def confidence(self) -> Optional[str]:
+    return _as_int(self._get("confidence"))
 
   @property
   def confidence_level(self) -> Optional[str]:
@@ -121,45 +84,36 @@ class Finding:
     return val.upper() if val else None
 
   @property
-  def confidence(self) -> Optional[str]:
-    return _as_int(self._get("confidence"))
-
-  @property
-  def status(self) -> Optional[str]:
-    val = _as_str(self._get("status"))
-    return val.upper() if val else None
-
-  @property
-  def source_stage(self) -> Optional[str]:
-    return _as_str(self._get("source_stage"))
-
-  @property
-  def verified(self) -> Optional[bool]:
-    return _as_bool(self._get("verified"))
-
-  @property
-  def muted(self) -> Optional[bool]:
-    return _as_bool(self._get("muted"))
-
-  @property
   def dismiss_reason(self) -> Optional[str]:
     return _as_str(self._get("dismiss_reason"))
 
   @property
-  def mute_reason(self) -> Optional[str]:
-    return _as_str(self._get("mute_reason"))
+  def end_line(self) -> Optional[int]:
+    return _as_int(self._get("end_line"))
+
+  @property
+  def file_path(self) -> Optional[str]:
+    return _as_str(self._get("file_path"))
+
+  @property
+  def finding_id(self) -> Optional[str]:
+    return _as_str(self._get("finding_id"))
 
   @property
   def fingerprint(self) -> Optional[str]:
     return _as_str(self._get("fingerprint"))
 
   @property
-  def analysis(self) -> Optional[str]:
-    return _as_str(self._get("analysis"))
+  def mute_reason(self) -> Optional[str]:
+    return _as_str(self._get("mute_reason"))
 
   @property
-  def snippet(self) -> Optional[str]:
-    return _as_str(self._get("snippet"))
+  def muted(self) -> Optional[bool]:
+    return _as_bool(self._get("muted"))
+
+  @property
+  def repository(self) -> Optional[str]:
+    return _as_str(self._get("repository"))
 
   @property
   def scan_timestamp(self) -> Optional[str]:
@@ -170,8 +124,46 @@ class Finding:
     return _as_str(self._get("session_id"))
 
   @property
+  def severity(self) -> Optional[str]:
+    val = _as_str(self._get("severity"))
+    return val.upper() if val else None
+
+  @property
+  def snippet(self) -> Optional[str]:
+    return _as_str(self._get("snippet"))
+
+  @property
+  def source_stage(self) -> Optional[str]:
+    return _as_str(self._get("source_stage"))
+
+  @property
+  def start_line(self) -> Optional[int]:
+    return _as_int(self._get("start_line"))
+
+  @property
+  def status(self) -> Optional[str]:
+    val = _as_str(self._get("status"))
+    return val.upper() if val else None
+
+  @property
+  def title(self) -> Optional[str]:
+    return _as_str(self._get("title"))
+
+  @property
   def updated_at(self) -> Optional[str]:
     return _as_str(self._get("updated_at"))
+
+  @property
+  def verified(self) -> Optional[bool]:
+    return _as_bool(self._get("verified"))
+
+  @property
+  def vuln_id(self) -> Optional[str]:
+    return _as_str(self._get("vuln_id"))
+
+  @property
+  def vuln_type(self) -> Optional[str]:
+    return _as_str(self._get("vuln_type"))
 
   # --- Factory Methods ---
 
