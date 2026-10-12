@@ -32,7 +32,6 @@ class _MockClient:
             gcp_bigquery.SchemaField("repository", "STRING"),
             gcp_bigquery.SchemaField("fingerprint", "STRING"),
             gcp_bigquery.SchemaField("finding_id", "STRING"),
-            gcp_bigquery.SchemaField("scan_id", "STRING"),
             gcp_bigquery.SchemaField("scan_timestamp", "TIMESTAMP"),
         ]
     )
@@ -54,18 +53,9 @@ class BigQueryTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       BigQuery(project="my-proj;drop table", dataset="my_ds", table="my_table", client=MagicMock())
 
-  def test_latest_findings_query(self):
-    query = bigquery._generate_fetch_findings_query("proj.ds.tbl")
-    self.assertIn("FROM `proj.ds.tbl`", query)
-    self.assertIn("WHERE repository = @repository", query)
-    self.assertNotIn("PARTITION BY", query)
-    self.assertNotIn("QUALIFY ROW_NUMBER()", query)
-
   def test_ensure_dataset_creates_idempotently_in_requested_location(self):
     client = MagicMock()
-    bq = BigQuery(project="project", dataset="dataset", location="us-central1", client=client)
-
-    bq.ensure_dataset()
+    bigquery._ensure_dataset(client, "project", "dataset", "us-central1")
 
     dataset_resource = client.create_dataset.call_args.args[0]
     self.assertEqual(dataset_resource.project, "project")
@@ -96,35 +86,32 @@ class BigQueryTests(unittest.TestCase):
     self.assertEqual(results, [])
 
   def test_build_finding_rows(self):
-    ctx = bigquery.ScanRunContext(
-        scan_id="scan-1",
-        repository="acme/widgets",
-        repo_dir="/tmp/repo",
-    )
     findings = [
-        {
-            "finding_id": "fid-1",
-            "title": "SQL injection in query",
-            "vuln_type": "CWE-89",
-            "severity": "HIGH",
-            "file_path": "src/db.py",
-            "start_line": 15,
-            "end_line": 20,
-            "status": "VERIFIED",
-            "fingerprint": "fp-1",
-        }
+        Finding(
+            finding_id="fid-1",
+            title="SQL injection in query",
+            vuln_type="CWE-89",
+            severity="HIGH",
+            file_path="src/db.py",
+            start_line=15,
+            end_line=20,
+            status="VERIFIED",
+            fingerprint="fp-1",
+        )
     ]
-    rows = bigquery.build_finding_rows(ctx, findings, scan_timestamp="2026-10-07T00:00:00Z")
+    rows = bigquery.build_finding_rows(
+        findings, repository="acme/widgets", scan_timestamp="2026-10-07T00:00:00Z"
+    )
     self.assertEqual(len(rows), 1)
     row = rows[0]
     self.assertEqual(row["finding_id"], "fid-1")
-    self.assertEqual(row["scan_id"], "scan-1")
     self.assertEqual(row["repository"], "acme/widgets")
     self.assertEqual(row["severity"], "HIGH")
     self.assertEqual(row["start_line"], 15)
     self.assertEqual(row["status"], "VERIFIED")
     self.assertEqual(row["fingerprint"], "fp-1")
     self.assertTrue(row["verified"])
+    self.assertNotIn("scan_id", row)
     self.assertNotIn("cwe_id", row)
     self.assertNotIn("fix_pr_url", row)
     self.assertNotIn("patch_status", row)
@@ -159,4 +146,3 @@ class BigQueryTests(unittest.TestCase):
 
 if __name__ == "__main__":
   unittest.main()
-

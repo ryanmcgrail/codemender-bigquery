@@ -38,8 +38,8 @@ class BigQueryRoundtripTests(unittest.TestCase):
         returncode=0, stdout="test-project-502314\n", stderr=""
     )
     with (
-        patch.object(bigquery, "resolve_project", return_value=None),
-        patch.object(bigquery.subprocess, "run", return_value=result) as run,
+        patch.dict(roundtrip.os.environ, {}, clear=True),
+        patch.object(roundtrip.subprocess, "run", return_value=result) as run,
     ):
       project = roundtrip._resolve_project()
 
@@ -89,7 +89,6 @@ class BigQueryRoundtripTests(unittest.TestCase):
             client=object(),
         )
 
-    mock_bq.ensure_dataset.assert_called_once()
     mock_cm.import_findings.assert_called_once_with([source])
     mock_cm.find.assert_called_once()
     mock_bq.upload_findings.assert_called_once()

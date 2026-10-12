@@ -162,10 +162,6 @@ class Finding:
     return _as_str(self._get("snippet"))
 
   @property
-  def scan_id(self) -> Optional[str]:
-    return _as_str(self._get("scan_id"))
-
-  @property
   def scan_timestamp(self) -> Optional[str]:
     return _as_str(self._get("scan_timestamp"))
 

@@ -1,6 +1,5 @@
 """BigQuery wrapper class and helpers for CodeMender findings."""
 
-import dataclasses
 import datetime
 import logging
 import re
@@ -44,54 +43,18 @@ def _utc_now_iso() -> str:
   return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-def _row_verified(
-    finding: Finding, status: str, force_verified: bool,
-    skip_verify: Optional[bool],
-) -> Optional[bool]:
+def _row_verified(finding: Finding, status: str) -> Optional[bool]:
   """Whether verification confirmed this finding."""
   if finding.verified:
     return True
-  if status in _VERIFIED_STATUSES:
-    return True
-  if status in _VERIFY_PASSED_STATUSES and (force_verified or skip_verify is False):
+  if status in _VERIFY_PASSED_STATUSES:
     return True
   return finding.verified
 
 
-@dataclasses.dataclass
-class ScanRunContext:
-  """Mutable accumulator for the facts that make up one scan run."""
-
-  stage: str = "scan"
-  scan_id: Optional[str] = None
-  repository: Optional[str] = None
-  target_branch: Optional[str] = None
-  target_sha: Optional[str] = None
-  scan_target: Optional[str] = None
-  cm_version: Optional[str] = None
-  find_model: Optional[str] = None
-  verify_model: Optional[str] = None
-  fix_model: Optional[str] = None
-  total_findings_count: Optional[int] = None
-  active_findings_count: Optional[int] = None
-  skipped_duplicate_count: Optional[int] = None
-  fixed_count: Optional[int] = None
-  failed_fix_count: Optional[int] = None
-  report_uri: Optional[str] = None
-  execution_url: Optional[str] = None
-  token_totals: Optional[Dict[str, Dict[str, Any]]] = None
-  wiz_status: Optional[str] = None
-  wiz_status_detail: Optional[str] = None
-  wiz_reported_count: Optional[int] = None
-  wiz_imported_count: Optional[int] = None
-  wiz_imported_ids: Optional[List[str]] = None
-  skip_verify: Optional[bool] = None
-  repo_dir: Optional[str] = None
-
-
 def build_finding_rows(
-    ctx: ScanRunContext,
     findings: Iterable[Finding],
+    repository: Optional[str] = None,
     scan_timestamp: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
@@ -99,12 +62,11 @@ def build_finding_rows(
     return []
 
   timestamp = scan_timestamp or _utc_now_iso()
-  scan_id = _as_str(ctx.scan_id) or "unknown"
-  repository = _as_str(ctx.repository)
-  wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
+  repo = _as_str(repository)
 
   rows: List[Dict[str, Any]] = []
-  for finding in findings:
+  for item in findings:
+    finding = item if isinstance(item, Finding) else Finding.from_dict(item)
     title = _as_str(finding.title)
     status = finding.status
     vuln_type = finding.vuln_type
@@ -118,8 +80,7 @@ def build_finding_rows(
         "fingerprint": finding.fingerprint,
         "mute_reason": finding.mute_reason,
         "muted": finding.muted,
-        "repository": repository,
-        "scan_id": scan_id,
+        "repository": repo,
         "scan_timestamp": timestamp,
         "severity": finding.severity,
         "source_stage": finding.source_stage,
@@ -127,7 +88,7 @@ def build_finding_rows(
         "start_line": finding.start_line,
         "status": status,
         "title": title,
-        "verified": _row_verified(finding, status, finding.finding_id in wiz_ids, ctx.skip_verify),
+        "verified": _row_verified(finding, status),
         "vuln_type": vuln_type,
     }
 
@@ -168,7 +129,6 @@ def _ensure_table(client: Any, table_id: str) -> List[Any]:
         gcp_bigquery.SchemaField("verified", "BOOLEAN"),
         gcp_bigquery.SchemaField("vuln_type", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("file_path", "STRING", mode="REQUIRED"),
-        gcp_bigquery.SchemaField("scan_id", "STRING"),
         gcp_bigquery.SchemaField("scan_timestamp", "TIMESTAMP"),
         gcp_bigquery.SchemaField("source_stage", "STRING"),
         gcp_bigquery.SchemaField("snippet", "STRING", mode="REQUIRED"),
@@ -248,17 +208,9 @@ WHERE repository = @repository
       findings: Iterable[Finding],
       repository: str,
       repo_dir: Optional[str] = None,
-      scan_id: Optional[str] = None,
   ) -> int:
     """Transforms CodeMender findings to telemetry rows and uploads them to BigQuery."""
-    context = ScanRunContext(
-        stage="bigquery_roundtrip",
-        scan_id=scan_id or str(uuid.uuid4()),
-        repository=repository,
-        repo_dir=repo_dir,
-        skip_verify=False,
-    )
-    finding_rows = build_finding_rows(context, findings)
+    finding_rows = build_finding_rows(findings, repository=repository)
     if not finding_rows:
       return 0
 
