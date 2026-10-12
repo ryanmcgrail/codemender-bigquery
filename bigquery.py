@@ -74,6 +74,7 @@ def build_finding_rows(
     row: Dict[str, Any] = {
         "analysis": finding.analysis,
         "confidence_level": finding.confidence_level,
+        "dismiss_reason": finding.dismiss_reason,
         "end_line": finding.end_line,
         "file_path": finding.file_path,
         "finding_id": finding.finding_id,
@@ -82,6 +83,7 @@ def build_finding_rows(
         "muted": finding.muted,
         "repository": repo,
         "scan_timestamp": timestamp,
+        "session_id": finding.session_id,
         "severity": finding.severity,
         "source_stage": finding.source_stage,
         "snippet": finding.snippet,
@@ -89,6 +91,7 @@ def build_finding_rows(
         "status": status,
         "title": title,
         "verified": _row_verified(finding, status),
+        "vuln_id": finding.vuln_id,
         "vuln_type": vuln_type,
     }
 
@@ -117,16 +120,20 @@ def _ensure_table(client: Any, table_id: str) -> List[Any]:
   except Exception:
     schema = [
         gcp_bigquery.SchemaField("analysis", "STRING", mode="REQUIRED"),
+        gcp_bigquery.SchemaField("confidence", "INTEGER"),
         gcp_bigquery.SchemaField("confidence_level", "STRING"),
+        gcp_bigquery.SchemaField("dismiss_reason", "STRING"),
         gcp_bigquery.SchemaField("end_line", "INTEGER", mode="REQUIRED"),
         gcp_bigquery.SchemaField("finding_id", "STRING"),
         gcp_bigquery.SchemaField("fingerprint", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("muted", "BOOLEAN"),
         gcp_bigquery.SchemaField("mute_reason", "STRING"),
         gcp_bigquery.SchemaField("repository", "STRING", mode="REQUIRED"),
+        gcp_bigquery.SchemaField("session_id", "STRING"),
         gcp_bigquery.SchemaField("severity", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("title", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("verified", "BOOLEAN"),
+        gcp_bigquery.SchemaField("vuln_id", "STRING"),
         gcp_bigquery.SchemaField("vuln_type", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("file_path", "STRING", mode="REQUIRED"),
         gcp_bigquery.SchemaField("scan_timestamp", "TIMESTAMP"),

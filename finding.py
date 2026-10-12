@@ -79,20 +79,16 @@ class Finding:
     return self._raw
 
   @property
-  def finding_id(self) -> str:
-    val = self._get("finding_id", "id")
-    return str(val).strip() if val is not None else ""
+  def finding_id(self) -> Optional[str]:
+    return _as_str(self._get("finding_id"))
 
   @property
   def repository(self) -> Optional[str]:
     return _as_str(self._get("repository"))
 
   @property
-  def file_path(self) -> str:
-    val = self._get("file_path", "path")
-    if not val:
-      return ""
-    return str(val)
+  def file_path(self) -> Optional[str]:
+    return _as_str(self._get("file_path"))
 
   @property
   def start_line(self) -> Optional[int]:
@@ -103,12 +99,12 @@ class Finding:
     return _as_int(self._get("end_line"))
 
   @property
-  def title(self) -> str:
-    return _as_str(self._get("title")) or ""
+  def title(self) -> Optional[str]:
+    return _as_str(self._get("title"))
 
   @property
   def vuln_type(self) -> Optional[str]:
-    return _as_str(self._get("vuln_type", "type"))
+    return _as_str(self._get("vuln_type"))
 
   @property
   def vuln_id(self) -> Optional[str]:
@@ -121,17 +117,17 @@ class Finding:
 
   @property
   def confidence_level(self) -> Optional[str]:
-    val = _as_str(self._get("confidence_level", "confidence"))
+    val = _as_str(self._get("confidence_level"))
     return val.upper() if val else None
 
   @property
   def confidence(self) -> Optional[str]:
-    return self.confidence_level
+    return _as_int(self._get("confidence"))
 
   @property
-  def status(self) -> str:
-    val = _as_str(self._get("status")) or "DETECTED"
-    return val.upper()
+  def status(self) -> Optional[str]:
+    val = _as_str(self._get("status"))
+    return val.upper() if val else None
 
   @property
   def source_stage(self) -> Optional[str]:
@@ -146,8 +142,12 @@ class Finding:
     return _as_bool(self._get("muted"))
 
   @property
+  def dismiss_reason(self) -> Optional[str]:
+    return _as_str(self._get("dismiss_reason"))
+
+  @property
   def mute_reason(self) -> Optional[str]:
-    return _as_str(self._get("mute_reason", "dismiss_reason"))
+    return _as_str(self._get("mute_reason"))
 
   @property
   def fingerprint(self) -> Optional[str]:
