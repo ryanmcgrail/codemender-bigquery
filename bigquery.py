@@ -65,7 +65,7 @@ def _table_id(project: str, dataset: str, table: str) -> str:
   return f"{project}.{dataset}.{table}"
 
 
-def _latest_findings_query(table_id: str) -> str:
+def _generate_fetch_findings_query(table_id: str) -> str:
   """Constructs the parameterized BigQuery query to fetch actionable findings."""
   return f"""
 SELECT *
@@ -232,7 +232,7 @@ class BigQuery:
           ]
       )
       rows = self.client.query(
-          _latest_findings_query(self.table_id),
+          _generate_fetch_findings_query(self.table_id),
           job_config=config,
           location=self.location,
       ).result()

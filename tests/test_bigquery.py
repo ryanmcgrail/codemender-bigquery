@@ -55,7 +55,7 @@ class BigQueryTests(unittest.TestCase):
       BigQuery(project="my-proj;drop table", dataset="my_ds", table="my_table", client=MagicMock())
 
   def test_latest_findings_query(self):
-    query = bigquery._latest_findings_query("proj.ds.tbl")
+    query = bigquery._generate_fetch_findings_query("proj.ds.tbl")
     self.assertIn("FROM `proj.ds.tbl`", query)
     self.assertIn("WHERE repository = @repository", query)
     self.assertNotIn("PARTITION BY", query)
