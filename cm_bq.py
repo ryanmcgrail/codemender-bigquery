@@ -41,7 +41,12 @@ def _print_heading(title: str):
 
 
 def _print_findings(findings: Iterable[Finding]):
-  sorted_findings = sorted(findings, key=lambda finding: finding.fingerprint)
+  sorted_findings = sorted(findings, key=lambda f: f.title.upper())
+
+  if len(sorted_findings) == 0:
+    print("  (None)")
+    return
+
   for i in range(len(sorted_findings)):
     finding = sorted_findings[i]
     print(f"  {1+i}) [{finding.fingerprint}] {finding.title}")

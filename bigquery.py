@@ -104,36 +104,31 @@ def build_finding_rows(
   wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
 
   rows: List[Dict[str, Any]] = []
-  for item in findings:
-    finding = item if isinstance(item, Finding) else Finding.from_dict(item)
-    finding_id = _as_str(finding.finding_id)
-    if not finding_id:
-      continue
-
+  for finding in findings:
     title = _as_str(finding.title)
     status = finding.status
     vuln_type = finding.vuln_type
 
     row: Dict[str, Any] = {
-        "finding_id": finding_id,
+        "analysis": finding.analysis,
+        "confidence_level": finding.confidence_level,
+        "end_line": finding.end_line,
+        "file_path": finding.file_path,
+        "finding_id": finding.finding_id,
+        "fingerprint": finding.fingerprint,
+        "mute_reason": finding.mute_reason,
+        "muted": finding.muted,
+        "repository": repository,
         "scan_id": scan_id,
         "scan_timestamp": timestamp,
-        "repository": repository,
-        "title": title,
-        "vuln_type": vuln_type,
         "severity": finding.severity,
-        "confidence_level": finding.confidence_level,
-        "file_path": finding.file_path,
-        "start_line": finding.start_line,
-        "end_line": finding.end_line,
-        "status": status,
         "source_stage": finding.source_stage,
-        "verified": _row_verified(finding, status, finding_id in wiz_ids, ctx.skip_verify),
-        "muted": finding.muted,
-        "mute_reason": finding.mute_reason,
-        "fingerprint": finding.fingerprint,
-        "analysis": finding.analysis,
         "snippet": finding.snippet,
+        "start_line": finding.start_line,
+        "status": status,
+        "title": title,
+        "verified": _row_verified(finding, status, finding.finding_id in wiz_ids, ctx.skip_verify),
+        "vuln_type": vuln_type,
     }
 
     rows.append(row)
