@@ -84,8 +84,8 @@ def run_roundtrip(
   _print_heading("Fetching latest findings from BigQuery...")
 
   print("BigQuery findings:")
-  bq_findings = bq.fetch_findings(repository)
-  _print_findings(bq_findings)
+  preexisting_bq_findings = bq.fetch_findings(repository)
+  _print_findings(preexisting_bq_findings)
   print()
 
   print("Existing CodeMender findings:")
@@ -93,8 +93,7 @@ def run_roundtrip(
   _print_findings(cm_findings)
   print()
 
-  newly_imported_findings = cm.import_findings(bq_findings)
-
+  newly_imported_findings = cm.import_findings(preexisting_bq_findings)
   print(f"Imported {len(newly_imported_findings)} findings into CodeMender.")
 
   _print_heading("Running CodeMender find on repository...")
@@ -113,6 +112,11 @@ def run_roundtrip(
 
   print("BigQuery findings after upload:")
   _print_findings(bq_findings_after_upload)
+  print()
+
+  print("New BigQuery findings:")
+  preexisting_bq_fingerprints = set([f.fingerprint for f in preexisting_bq_findings])
+  _print_findings([f for f in bq_findings_after_upload if f not in preexisting_bq_fingerprints])
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
