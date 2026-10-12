@@ -8,33 +8,6 @@ _TRUTHY = frozenset({"true", "1", "yes", "on"})
 
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
 
-_FINDING_KEY_ALIASES = {
-    "finding_id": "FindingID",
-    "session_id": "SessionID",
-    "title": "Title",
-    "file_path": "FilePath",
-    "severity": "Severity",
-    "confidence": "Confidence",
-    "analysis": "Analysis",
-    "snippet": "Snippet",
-    "vuln_type": "VulnType",
-    "vuln_id": "VulnID",
-    "fingerprint": "Fingerprint",
-    "status": "Status",
-    "source_stage": "SourceStage",
-    "finding_json": "FindingJSON",
-    "updated_at": "UpdatedAt",
-    "start_line": "StartLine",
-    "end_line": "EndLine",
-    "dismiss_reason": "DismissReason",
-    "confidence_level": "ConfidenceLevel",
-}
-
-# Reverse aliases: PascalCase -> snake_case
-_PASCAL_TO_SNAKE = {v: k for k, v in _FINDING_KEY_ALIASES.items()}
-_PASCAL_TO_SNAKE["confidence"] = "confidence_level"
-_PASCAL_TO_SNAKE["Confidence"] = "confidence_level"
-
 
 # --- Helper Conversion Functions ---
 
@@ -107,50 +80,48 @@ class Finding:
 
   @property
   def finding_id(self) -> str:
-    val = self._get("finding_id", "FindingID", "id")
+    val = self._get("finding_id", "id")
     return str(val).strip() if val is not None else ""
 
   @property
   def repository(self) -> Optional[str]:
-    return _as_str(self._get("repository", "Repository"))
+    return _as_str(self._get("repository"))
 
   @property
   def file_path(self) -> str:
-    val = self._get("file_path", "FilePath", "path")
+    val = self._get("file_path", "path")
     if not val:
       return ""
     return str(val)
 
   @property
   def start_line(self) -> Optional[int]:
-    return _as_int(self._get("start_line", "StartLine"))
+    return _as_int(self._get("start_line"))
 
   @property
   def end_line(self) -> Optional[int]:
-    return _as_int(self._get("end_line", "EndLine"))
+    return _as_int(self._get("end_line"))
 
   @property
   def title(self) -> str:
-    return _as_str(self._get("title", "Title")) or ""
+    return _as_str(self._get("title")) or ""
 
   @property
   def vuln_type(self) -> Optional[str]:
-    return _as_str(self._get("vuln_type", "VulnType", "type"))
+    return _as_str(self._get("vuln_type", "type"))
 
   @property
   def vuln_id(self) -> Optional[str]:
-    return _as_str(self._get("vuln_id", "VulnID"))
+    return _as_str(self._get("vuln_id"))
 
   @property
   def severity(self) -> Optional[str]:
-    val = _as_str(self._get("severity", "Severity"))
+    val = _as_str(self._get("severity"))
     return val.upper() if val else None
 
   @property
   def confidence_level(self) -> Optional[str]:
-    val = _as_str(
-        self._get("confidence_level", "ConfidenceLevel", "confidence", "Confidence")
-    )
+    val = _as_str(self._get("confidence_level", "confidence"))
     return val.upper() if val else None
 
   @property
@@ -159,54 +130,52 @@ class Finding:
 
   @property
   def status(self) -> str:
-    val = _as_str(self._get("status", "Status")) or "DETECTED"
+    val = _as_str(self._get("status")) or "DETECTED"
     return val.upper()
 
   @property
   def source_stage(self) -> Optional[str]:
-    return _as_str(self._get("source_stage", "SourceStage"))
+    return _as_str(self._get("source_stage"))
 
   @property
   def verified(self) -> Optional[bool]:
-    return _as_bool(self._get("verified", "Verified"))
+    return _as_bool(self._get("verified"))
 
   @property
   def muted(self) -> Optional[bool]:
-    return _as_bool(self._get("muted", "Muted"))
+    return _as_bool(self._get("muted"))
 
   @property
   def mute_reason(self) -> Optional[str]:
-    return _as_str(
-        self._get("mute_reason", "MuteReason", "dismiss_reason", "DismissReason")
-    )
+    return _as_str(self._get("mute_reason", "dismiss_reason"))
 
   @property
   def fingerprint(self) -> Optional[str]:
-    return _as_str(self._get("fingerprint", "Fingerprint"))
+    return _as_str(self._get("fingerprint"))
 
   @property
   def analysis(self) -> Optional[str]:
-    return _as_str(self._get("analysis", "Analysis"))
+    return _as_str(self._get("analysis"))
 
   @property
   def snippet(self) -> Optional[str]:
-    return _as_str(self._get("snippet", "Snippet"))
+    return _as_str(self._get("snippet"))
 
   @property
   def scan_id(self) -> Optional[str]:
-    return _as_str(self._get("scan_id", "ScanID"))
+    return _as_str(self._get("scan_id"))
 
   @property
   def scan_timestamp(self) -> Optional[str]:
-    return _as_str(self._get("scan_timestamp", "ScanTimestamp"))
+    return _as_str(self._get("scan_timestamp"))
 
   @property
   def session_id(self) -> Optional[str]:
-    return _as_str(self._get("session_id", "SessionID"))
+    return _as_str(self._get("session_id"))
 
   @property
   def updated_at(self) -> Optional[str]:
-    return _as_str(self._get("updated_at", "UpdatedAt"))
+    return _as_str(self._get("updated_at"))
 
   # --- Factory Methods ---
 
@@ -244,6 +213,3 @@ class Finding:
 
   def __hash__(self) -> int:
     return hash(self.finding_id)
-
-
-Findings = Finding

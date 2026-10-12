@@ -107,13 +107,13 @@ class BigQueryRoundtripTests(unittest.TestCase):
         "start_line": 12,
     })
     imported = Finding.from_dict({
-        "FindingID": "source-finding-id",
-        "Fingerprint": "source-fingerprint",
-        "FilePath": "src/db.py",
-        "Title": "SQL injection",
-        "VulnType": "SQL Injection",
-        "StartLine": 12,
-        "Status": "OPEN",
+        "finding_id": "source-finding-id",
+        "fingerprint": "source-fingerprint",
+        "file_path": "src/db.py",
+        "title": "SQL injection",
+        "vuln_type": "SQL Injection",
+        "start_line": 12,
+        "status": "OPEN",
     })
 
     mock_cm = MagicMock()
@@ -148,13 +148,13 @@ class BigQueryRoundtripTests(unittest.TestCase):
 
   def test_roundtrip_scans_and_uploads_when_source_empty(self):
     discovered = Finding.from_dict({
-        "FindingID": "cm-new",
-        "Fingerprint": "fp-new",
-        "FilePath": "src/new.py",
-        "Title": "New issue",
-        "VulnType": "SQL Injection",
-        "StartLine": 25,
-        "Status": "OPEN",
+        "finding_id": "cm-new",
+        "fingerprint": "fp-new",
+        "file_path": "src/new.py",
+        "title": "New issue",
+        "vuln_type": "SQL Injection",
+        "start_line": 25,
+        "status": "OPEN",
     })
 
     mock_cm = MagicMock()

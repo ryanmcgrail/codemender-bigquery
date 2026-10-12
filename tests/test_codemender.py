@@ -117,7 +117,7 @@ class CodeMenderTests(unittest.TestCase):
 
   def test_list_findings(self):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
-    raw = json.dumps([{"FindingID": "cm-99"}])
+    raw = json.dumps([{"finding_id": "cm-99"}])
     proc = types.SimpleNamespace(returncode=0, stdout=raw)
     with patch("codemender.run_command", return_value=proc):
       findings = cm.list_findings()
@@ -126,7 +126,7 @@ class CodeMenderTests(unittest.TestCase):
 
   def test_import_findings(self):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
-    before_raw = json.dumps([{"FindingID": "cm-1", "Fingerprint": "fp-1"}])
+    before_raw = json.dumps([{"finding_id": "cm-1", "fingerprint": "fp-1"}])
     proc_before = types.SimpleNamespace(returncode=0, stdout=before_raw)
     proc_import = types.SimpleNamespace(returncode=0, stdout="Imported")
     to_import = [Finding(finding_id="f-2", fingerprint="fp-2", file_path="src/main.py", title="Bug")]
