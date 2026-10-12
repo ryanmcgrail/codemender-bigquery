@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 
 from finding import Finding
 
@@ -90,10 +90,6 @@ def run_command(
   return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
 
 
-class FindingImportError(RuntimeError):
-  """Raised when the import round-trip cannot establish the assigned IDs."""
-
-
 IMPORTED_FINDING_FIELDS = (
     "file_path",
     "line",
@@ -104,20 +100,6 @@ IMPORTED_FINDING_FIELDS = (
     "vuln_type",
     "snippet",
 )
-
-
-def _ids(findings: Sequence[Any]) -> List[str]:
-  res = []
-  for f in findings:
-    if isinstance(f, Finding):
-      fid = f.finding_id
-    elif hasattr(f, "get"):
-      fid = str(f.get("FindingID") or f.get("finding_id") or "")
-    else:
-      fid = str(getattr(f, "finding_id", ""))
-    if fid:
-      res.append(fid)
-  return res
 
 
 def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
@@ -183,7 +165,7 @@ class CodeMender:
         check=False,
     )
     if res.returncode != 0:
-      raise FindingImportError(
+      raise RuntimeError(
           f"'cm report --format json' exited {res.returncode}"
       )
 
@@ -197,15 +179,13 @@ class CodeMender:
   def import_findings(
       self,
       findings: Sequence[Finding],
-  ) -> Tuple[List[str], List[Finding]]:
-    """Imports findings and returns the IDs cm assigned them."""
+  ) -> List[Finding]:
+    """Imports findings, ignoring the duplicates. Returns the list of newly imported findings."""
     before_findings = self.list_findings()
-    before_ids = set(_ids(before_findings))
-
     before_fingerprints = set([f.fingerprint for f in before_findings])
     findings_not_already_in_cm = [f for f in findings if f.fingerprint not in before_fingerprints]
     if len(findings_not_already_in_cm) == 0:
-      return [], []
+      return []
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_file:
       import_file = tmp_file.name
@@ -223,16 +203,8 @@ class CodeMender:
         os.remove(import_file)
 
     if import_res.returncode != 0:
-      raise FindingImportError(
+      raise RuntimeError(
           f"'cm report import' exited {import_res.returncode}"
       )
 
-    after_findings = self.list_findings()
-    assigned = [fid for fid in _ids(after_findings) if fid not in before_ids]
-    if not assigned:
-      raise FindingImportError(
-          "'cm report import' exited 0 but the finding set is unchanged, so no"
-          " imported finding ID could be resolved"
-      )
-    logger.info("Import round-trip: cm assigned %d finding ID(s).", len(assigned))
-    return assigned, after_findings
+    return findings_not_already_in_cm

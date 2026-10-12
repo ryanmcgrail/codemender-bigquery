@@ -2,7 +2,6 @@
 
 import types
 import unittest
-from unittest.mock import MagicMock, patch
 
 from google.cloud import bigquery
 

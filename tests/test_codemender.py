@@ -127,16 +127,13 @@ class CodeMenderTests(unittest.TestCase):
   def test_import_findings(self):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
     before_raw = json.dumps([{"FindingID": "cm-1", "Fingerprint": "fp-1"}])
-    after_raw = json.dumps([{"FindingID": "cm-1", "Fingerprint": "fp-1"}, {"FindingID": "cm-2", "Fingerprint": "fp-2"}])
     proc_before = types.SimpleNamespace(returncode=0, stdout=before_raw)
     proc_import = types.SimpleNamespace(returncode=0, stdout="Imported")
-    proc_after = types.SimpleNamespace(returncode=0, stdout=after_raw)
     to_import = [Finding(finding_id="f-2", fingerprint="fp-2", file_path="src/main.py", title="Bug")]
 
-    with patch("codemender.run_command", side_effect=[proc_before, proc_import, proc_after]) as mock_run:
-      assigned, after = cm.import_findings(to_import)
-    self.assertEqual(assigned, ["cm-2"])
-    self.assertEqual(len(after), 2)
+    with patch("codemender.run_command", side_effect=[proc_before, proc_import]) as mock_run:
+      imported = cm.import_findings(to_import)
+    self.assertEqual(imported, to_import)
     import_cmd = mock_run.call_args_list[1].args[0]
     temp_file_path = import_cmd[import_cmd.index("-f") + 1]
     self.assertFalse(os.path.exists(temp_file_path))

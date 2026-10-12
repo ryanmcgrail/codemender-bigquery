@@ -1,8 +1,7 @@
 """Unit tests for standalone fetch_bigquery_findings.py."""
 
-import types
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import import_from_bq as fetcher
 

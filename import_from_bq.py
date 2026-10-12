@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import subprocess
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, List, Optional
 
 from finding import Finding
 

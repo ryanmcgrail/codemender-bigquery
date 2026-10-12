@@ -91,9 +91,9 @@ def run_roundtrip(
   _print_findings(cm_findings)
   print()
 
-  imported_ids, after_find_findings = cm.import_findings(bq_findings)
+  newly_imported_findings = cm.import_findings(bq_findings)
 
-  print(f"Imported {len(imported_ids)} findings into CodeMender.")
+  print(f"Imported {len(newly_imported_findings)} findings into CodeMender.")
 
   _print_heading("Running CodeMender find on repository...")
 

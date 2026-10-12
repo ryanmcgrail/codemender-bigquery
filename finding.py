@@ -1,22 +1,14 @@
 from __future__ import annotations
 
-import datetime
 import re
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, Mapping, Optional
 
 # --- Constants & Pattern Definitions ---
 
 _CWE_PATTERN = re.compile(r"(CWE-\d+)", re.IGNORECASE)
 _TRUTHY = frozenset({"true", "1", "yes", "on"})
 
-_FIXED_STATUSES = frozenset({"FIXED", "REMEDIATED", "PATCHED"})
-_FAILED_FIX_STATUSES = frozenset({"FIX_FAILED", "PR_CREATION_FAILED", "PATCH_FAILED"})
-_VERIFIED_STATUSES = frozenset({"VERIFIED", "CONFIRMED"})
-_VERIFY_PASSED_STATUSES = _VERIFIED_STATUSES | _FIXED_STATUSES | _FAILED_FIX_STATUSES
 SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
-_CLOSED_STATUSES = frozenset(
-    {"FIXED", "REMEDIATED", "PATCHED", "DISMISSED", "FALSE_POSITIVE", "RESOLVED"}
-)
 
 _FINDING_KEY_ALIASES = {
     "finding_id": "FindingID",
