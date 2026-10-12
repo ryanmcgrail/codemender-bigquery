@@ -89,9 +89,9 @@ def run_roundtrip(
 
   _print_heading("Running CodeMender find on repository...")
 
-  cm.find('routes/login.ts')
+  cm.find()
 
-  _print_heading("Exporting findings to BigQuery...")
+  _print_heading("Uploading findings to BigQuery...")
   cm_findings = cm.list_findings()
   export_findings_to_bigquery(
       client=client,
@@ -101,6 +101,13 @@ def run_roundtrip(
       repo_dir=repo_dir,
       location=location,
   )
+
+  bq_findings_after_upload = fetch_findings_from_bigquery(
+      client, table_id, repository, location=location
+  )
+
+  print("BigQuery findings after upload:")
+  pprint(bq_findings_after_upload, indent = 2)
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:

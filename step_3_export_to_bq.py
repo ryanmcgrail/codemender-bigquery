@@ -74,17 +74,17 @@ def _repo_relative_path(raw_path: Any, repo_dir: Optional[str] = None) -> Option
 
 
 def _row_verified(
-    finding: Dict[str, Any], status: str, force_verified: bool,
+    finding: Finding, status: str, force_verified: bool,
     skip_verify: Optional[bool],
 ) -> Optional[bool]:
   """Whether verification confirmed this finding."""
-  if _as_bool(finding.get("verified")):
+  if finding.verified:
     return True
   if status in _VERIFIED_STATUSES:
     return True
   if status in _VERIFY_PASSED_STATUSES and (force_verified or skip_verify is False):
     return True
-  return _as_bool(finding.get("verified"))
+  return finding.verified
 
 
 @dataclasses.dataclass
@@ -136,45 +136,40 @@ def build_finding_rows(
   wiz_ids = {str(i) for i in (ctx.wiz_imported_ids or [])}
 
   rows: List[Dict[str, Any]] = []
-  for finding in findings:
-    if not isinstance(finding, dict):
-      continue
-    finding_id = _as_str(finding.get("finding_id"))
+  for item in findings:
+    finding = item if isinstance(item, Finding) else Finding.from_dict(item)
+    finding_id = _as_str(finding.finding_id)
     if not finding_id:
       continue
 
-    title = _as_str(finding.get("title"))
-    status = (_as_str(finding.get("status")) or "DETECTED").upper()
-    vuln_type = _as_str(finding.get("vuln_type"))
-    severity = _as_str(finding.get("severity"))
-    confidence_level = _as_str(
-        finding.get("confidence_level")
-    ) or _as_str(finding.get("confidence"))
+    title = _as_str(finding.title)
+    status = finding.status
+    vuln_type = finding.vuln_type
 
     row: Dict[str, Any] = {
+        "finding_id": finding_id,
         "scan_id": scan_id,
         "scan_timestamp": timestamp,
         "repository": repository,
         "title": title,
         "vuln_type": vuln_type,
-        "cwe_id": extract_cwe_id(finding.get("vuln_id"), vuln_type, title),
-        "severity": severity.upper() if severity else None,
-        "confidence_level": confidence_level.upper() if confidence_level else None,
-        "file_path": _repo_relative_path(finding.get("file_path"), repo_dir),
-        "start_line": _as_int(finding.get("start_line")),
-        "end_line": _as_int(finding.get("end_line")),
+        "cwe_id": finding.cwe_id,
+        "severity": finding.severity,
+        "confidence_level": finding.confidence_level,
+        "file_path": _repo_relative_path(finding.file_path, repo_dir),
+        "start_line": finding.start_line,
+        "end_line": finding.end_line,
         "status": status,
-        "source_stage": _as_str(finding.get("source_stage")),
+        "source_stage": finding.source_stage,
         "verified": _row_verified(finding, status, finding_id in wiz_ids, ctx.skip_verify),
-        "muted": _as_bool(finding.get("muted")),
-        "mute_reason": _as_str(finding.get("mute_reason"))
-        or _as_str(finding.get("dismiss_reason")),
-        "fingerprint": _as_str(finding.get("fingerprint")),
-        "fix_pr_url": _as_str(prs.get(finding_id)),
-        "patch_status": _as_str(finding.get("patch_status")),
+        "muted": finding.muted,
+        "mute_reason": finding.mute_reason,
+        "fingerprint": finding.fingerprint,
+        "fix_pr_url": _as_str(prs.get(finding_id)) or finding.fix_pr_url,
+        "patch_status": finding.patch_status,
         "finding_source": "wiz" if finding_id in wiz_ids else "codemender",
-        "analysis": _as_str(finding.get("analysis")),
-        "snippet": _as_str(finding.get("snippet"))
+        "analysis": finding.analysis,
+        "snippet": finding.snippet,
     }
 
     rows.append(row)
@@ -246,12 +241,41 @@ def export_findings_to_bigquery(
       pass
 
   columns = [field.name for field in schema]
+  identity = {"repository", "fingerprint"}
+  missing_identity = identity.difference(columns)
+  if missing_identity:
+    raise ValueError(
+        "Findings table is missing key columns: "
+        + ", ".join(sorted(missing_identity))
+    )
+
   rows_to_load = [
       {key: value for key, value in row.items() if key in columns}
       for row in finding_rows
   ]
-  job_config = bigquery.LoadJobConfig(schema=schema)
-  client.load_table_from_json(
-      rows_to_load, table_id, job_config=job_config, location=location
-  ).result()
-  return len(rows_to_load)
+  stage_table_id = f"{table_id.rsplit('.', 1)[0]}._cm_stage_{uuid.uuid4().hex}"
+
+  try:
+    job_config = bigquery.LoadJobConfig(
+        schema=schema, write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+    )
+    client.load_table_from_json(
+        rows_to_load, stage_table_id, job_config=job_config, location=location
+    ).result()
+
+    columns_sql = ", ".join(f"`{column}`" for column in columns)
+    updates_sql = ", ".join(
+        f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
+    )
+    values_sql = ", ".join(f"S.`{column}`" for column in columns)
+    merge_sql = f"""
+MERGE `{table_id}` AS T
+USING `{stage_table_id}` AS S
+ON T.repository = S.repository AND T.fingerprint = S.fingerprint
+WHEN MATCHED THEN UPDATE SET {updates_sql}
+WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
+"""
+    client.query(merge_sql, location=location).result()
+    return len(rows_to_load)
+  finally:
+    client.delete_table(stage_table_id, not_found_ok=True)
