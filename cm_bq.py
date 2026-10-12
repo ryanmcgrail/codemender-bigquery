@@ -62,8 +62,6 @@ def run_roundtrip(
 
   _print_heading("Fetching latest findings from BigQuery...")
 
-  bq.ensure_dataset()
-
   print("BigQuery findings:")
   bq_findings = bq.fetch_findings(repository)
   _print_findings(bq_findings)

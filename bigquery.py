@@ -190,6 +190,58 @@ def build_finding_rows(
   return rows
 
 
+def _ensure_dataset(client: Any, project: str, dataset: str, location: Optional[str]) -> None:
+    """Creates the configured BigQuery dataset if it does not already exist."""
+    from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
+
+    dataset_resource = gcp_bigquery.Dataset(f"{project}.{dataset}")
+    if location:
+      dataset_resource.location = location
+    client.create_dataset(dataset_resource, exists_ok=True)
+
+
+def _ensure_table(client: Any, table_id: str) -> List[Any]:
+  """Ensures the BigQuery findings table exists and returns its schema."""
+  from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
+
+  try:
+    target_table = client.get_table(table_id)
+    return target_table.schema
+  except Exception:
+    schema = [
+        gcp_bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
+        gcp_bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
+        gcp_bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
+        gcp_bigquery.SchemaField("repository", "STRING"),
+        gcp_bigquery.SchemaField("title", "STRING"),
+        gcp_bigquery.SchemaField("vuln_type", "STRING"),
+        gcp_bigquery.SchemaField("severity", "STRING"),
+        gcp_bigquery.SchemaField("confidence_level", "STRING"),
+        gcp_bigquery.SchemaField("file_path", "STRING"),
+        gcp_bigquery.SchemaField("start_line", "INTEGER"),
+        gcp_bigquery.SchemaField("end_line", "INTEGER"),
+        gcp_bigquery.SchemaField("status", "STRING"),
+        gcp_bigquery.SchemaField("source_stage", "STRING"),
+        gcp_bigquery.SchemaField("verified", "BOOLEAN"),
+        gcp_bigquery.SchemaField("muted", "BOOLEAN"),
+        gcp_bigquery.SchemaField("mute_reason", "STRING"),
+        gcp_bigquery.SchemaField("fingerprint", "STRING"),
+        gcp_bigquery.SchemaField("analysis", "STRING"),
+        gcp_bigquery.SchemaField("snippet", "STRING"),
+    ]
+    table = gcp_bigquery.Table(table_id, schema=schema)
+    table.time_partitioning = gcp_bigquery.TimePartitioning(
+        type_=gcp_bigquery.TimePartitioningType.DAY, field="scan_timestamp"
+    )
+    table.clustering_fields = ["repository", "severity", "vuln_type"]
+    table.description = "One row per CodeMender vulnerability finding."
+    try:
+      client.create_table(table, exists_ok=True)
+    except Exception:
+      pass
+    return schema
+
+
 class BigQuery:
   """Encapsulates BigQuery configuration and finding operations for a table."""
 
@@ -212,18 +264,11 @@ class BigQuery:
       client = gcp_bigquery.Client(project=project)
     self.client = client
 
-  def ensure_dataset(self) -> None:
-    """Creates the configured BigQuery dataset if it does not already exist."""
-    from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
-
-    dataset_resource = gcp_bigquery.Dataset(f"{self.project}.{self.dataset}")
-    if self.location:
-      dataset_resource.location = self.location
-    self.client.create_dataset(dataset_resource, exists_ok=True)
-
   def fetch_findings(self, repository: str) -> List[Finding]:
     """Loads actionable findings for a repository from BigQuery."""
     from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
+
+    _ensure_dataset(self.client, self.project, self.dataset, self.location)
 
     try:
       config = gcp_bigquery.QueryJobConfig(
@@ -265,41 +310,7 @@ class BigQuery:
 
     from google.cloud import bigquery as gcp_bigquery  # pylint: disable=import-outside-toplevel
 
-    try:
-      target_table = self.client.get_table(self.table_id)
-      schema = target_table.schema
-    except Exception:
-      schema = [
-          gcp_bigquery.SchemaField("finding_id", "STRING", mode="REQUIRED"),
-          gcp_bigquery.SchemaField("scan_id", "STRING", mode="REQUIRED"),
-          gcp_bigquery.SchemaField("scan_timestamp", "TIMESTAMP", mode="REQUIRED"),
-          gcp_bigquery.SchemaField("repository", "STRING"),
-          gcp_bigquery.SchemaField("title", "STRING"),
-          gcp_bigquery.SchemaField("vuln_type", "STRING"),
-          gcp_bigquery.SchemaField("severity", "STRING"),
-          gcp_bigquery.SchemaField("confidence_level", "STRING"),
-          gcp_bigquery.SchemaField("file_path", "STRING"),
-          gcp_bigquery.SchemaField("start_line", "INTEGER"),
-          gcp_bigquery.SchemaField("end_line", "INTEGER"),
-          gcp_bigquery.SchemaField("status", "STRING"),
-          gcp_bigquery.SchemaField("source_stage", "STRING"),
-          gcp_bigquery.SchemaField("verified", "BOOLEAN"),
-          gcp_bigquery.SchemaField("muted", "BOOLEAN"),
-          gcp_bigquery.SchemaField("mute_reason", "STRING"),
-          gcp_bigquery.SchemaField("fingerprint", "STRING"),
-          gcp_bigquery.SchemaField("analysis", "STRING"),
-          gcp_bigquery.SchemaField("snippet", "STRING"),
-      ]
-      table = gcp_bigquery.Table(self.table_id, schema=schema)
-      table.time_partitioning = gcp_bigquery.TimePartitioning(
-          type_=gcp_bigquery.TimePartitioningType.DAY, field="scan_timestamp"
-      )
-      table.clustering_fields = ["repository", "severity", "vuln_type"]
-      table.description = "One row per CodeMender vulnerability finding."
-      try:
-        self.client.create_table(table, exists_ok=True)
-      except Exception:
-        pass
+    schema = _ensure_table(self.client, self.table_id)
 
     columns = [field.name for field in schema]
     identity = {"repository", "fingerprint"}
