@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-from pprint import pprint
 import shutil
 import sys
 from typing import Any, Optional, Sequence
@@ -41,6 +40,12 @@ def _print_heading(title: str):
   print("#########################")
   print()
 
+def _print_findings(findings: Iterable[Finding]):
+  sorted_findings = sorted(findings, key=lambda finding: finding.fingerprint)
+  for i in range(len(sorted_findings)):
+    finding = sorted_findings[i]
+    print(f"  {1+i}) [{finding.fingerprint}] {finding.title}")
+
 
 def run_roundtrip(
     *,
@@ -75,12 +80,17 @@ def run_roundtrip(
   _print_heading("Fetching latest findings from BigQuery...")
 
   ensure_dataset(client, project, dataset, location)
+
+  print("BigQuery findings:")
   bq_findings = fetch_findings_from_bigquery(
       client, table_id, repository, location=location
   )
+  _print_findings(bq_findings)
+  print()
 
-  print("BigQuery findings:")
-  pprint(bq_findings, indent = 2)
+  print("Existing CodeMender findings:")
+  cm_findings = cm.list_findings()
+  _print_findings(cm_findings)
   print()
 
   imported_ids, after_find_findings = cm.import_findings(bq_findings)
@@ -92,11 +102,11 @@ def run_roundtrip(
   cm.find()
 
   _print_heading("Uploading findings to BigQuery...")
-  cm_findings = cm.list_findings()
+  cm_findings_after_find = cm.list_findings()
   export_findings_to_bigquery(
       client=client,
       table_id=table_id,
-      findings=cm_findings,
+      findings=cm_findings_after_find,
       repository=repository,
       repo_dir=repo_dir,
       location=location,
@@ -107,7 +117,7 @@ def run_roundtrip(
   )
 
   print("BigQuery findings after upload:")
-  pprint(bq_findings_after_upload, indent = 2)
+  _print_findings(bq_findings_after_upload)
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
