@@ -1,12 +1,139 @@
 """CodeMender CLI wrapper class and helpers."""
 
+import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Sequence
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from finding import Finding
-import run_cm_find as finder
 
 logger = logging.getLogger("codemender")
+
+_CI_GATE_BLOCKING = re.compile(r"CI Gate Failure:\s*\d+ blocking finding")
+_CI_GATE_TRUNCATED = re.compile(r"CI Gate Failure:\s*Impact expansion truncated")
+
+
+def is_ci_gate_exit(returncode: int, find_stdout: str) -> bool:
+  """Whether cm find exited 1 only because CI gate found blocking findings."""
+  text = find_stdout or ""
+  return (
+      returncode == 1
+      and bool(_CI_GATE_BLOCKING.search(text))
+      and not _CI_GATE_TRUNCATED.search(text)
+  )
+
+
+def build_cm_command(
+    cm_binary: str,
+    action: str,
+    target_or_id: Optional[str] = None,
+    extra_flags: Optional[List[str]] = None,
+) -> List[str]:
+  """Centralized command builder for CodeMender CLI invocations."""
+  if action == "find" and not target_or_id:
+    raise ValueError(f"Action '{action}' requires a valid target or finding ID.")
+
+  if action == "find":
+    cmd = [cm_binary, "find", target_or_id]
+  elif action == "init":
+    cmd = [cm_binary, "init"]
+    if extra_flags:
+      cmd.extend(extra_flags)
+  else:
+    cmd = [cm_binary, action]
+    if extra_flags:
+      cmd.extend(extra_flags)
+  return cmd
+
+
+def run_command(
+    cmd: List[str],
+    cwd: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    check: bool = True,
+    print_to_stdout: bool = False,
+) -> subprocess.CompletedProcess:
+  """Executes a subprocess command, streaming stdout/stderr in real-time."""
+  logger.info("Executing comand: %s", " ".join(cmd))
+
+  process = subprocess.Popen(
+      cmd,
+      cwd=cwd,
+      env=env,
+      stdin=subprocess.DEVNULL,
+      stdout=subprocess.PIPE,
+      stderr=subprocess.STDOUT if print_to_stdout else subprocess.DEVNULL,
+      text=True,
+      bufsize=1,
+  )
+
+  stdout_lines = []
+  for line in process.stdout:
+    stdout_lines.append(line)
+    if print_to_stdout:
+      sys.stdout.write(line)
+      sys.stdout.flush()
+  process.stdout.close()
+
+  return_code = process.wait()
+
+  logger.info(f"Command completed with exit code {return_code}")
+
+  if check and return_code != 0:
+    logger.error("Command failed with code %d", return_code)
+    raise subprocess.CalledProcessError(return_code, cmd, stdout_lines, "")
+
+  return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
+
+
+class FindingImportError(RuntimeError):
+  """Raised when the import round-trip cannot establish the assigned IDs."""
+
+
+IMPORTED_FINDING_FIELDS = (
+    "file_path",
+    "line",
+    "end_line",
+    "title",
+    "message",
+    "severity",
+    "vuln_type",
+    "snippet",
+)
+
+
+def _ids(findings: Sequence[Any]) -> List[str]:
+  res = []
+  for f in findings:
+    if isinstance(f, Finding):
+      fid = f.finding_id
+    elif hasattr(f, "get"):
+      fid = str(f.get("FindingID") or f.get("finding_id") or "")
+    else:
+      fid = str(getattr(f, "finding_id", ""))
+    if fid:
+      res.append(fid)
+  return res
+
+
+def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
+  """Writes a simple-JSON import payload, keeping only recognized fields."""
+  payload = []
+  for f in findings:
+    if isinstance(f, Finding):
+      payload.append(f.to_cm_import_record())
+    elif hasattr(f, "__getitem__"):
+      payload.append({k: f[k] for k in IMPORTED_FINDING_FIELDS if k in f})
+    else:
+      payload.append({k: getattr(f, k) for k in IMPORTED_FINDING_FIELDS if hasattr(f, k)})
+  os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
+  with open(dest_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2)
+  return dest_path
 
 
 class CodeMender:
@@ -28,15 +155,15 @@ class CodeMender:
   ) -> Any:
     """Runs the CodeMender find command on the target repository directory."""
     target = target_or_id if target_or_id is not None else self.repo_dir
-    command = finder.build_cm_command(
+    command = build_cm_command(
         self.cm_binary,
         "find",
         target_or_id=target,
     )
-    result = finder.run_command(command, cwd=self.repo_dir, env=self.env, check=False, print_to_stdout=True)
+    result = run_command(command, cwd=self.repo_dir, env=self.env, check=False, print_to_stdout=True)
     returncode = getattr(result, "returncode", 0)
     stdout = getattr(result, "stdout", "")
-    if returncode and not finder.is_ci_gate_exit(returncode, stdout or ""):
+    if returncode and not is_ci_gate_exit(returncode, stdout or ""):
       raise RuntimeError(f"cm find failed with exit code {returncode}")
     return result
 
@@ -44,20 +171,68 @@ class CodeMender:
       self,
   ) -> List[Finding]:
     """Returns every finding currently in CodeMender state for this repo."""
-    return finder.fetch_findings_from_cm_report(
+    report_cmd = build_cm_command(
         self.cm_binary,
-        self.repo_dir,
-        env=self.env,
+        "report",
+        extra_flags=["--format", "json"],
     )
+    res = run_command(
+        report_cmd,
+        cwd=self.repo_dir,
+        env=self.env,
+        check=False,
+    )
+    if res.returncode != 0:
+      raise FindingImportError(
+          f"'cm report --format json' exited {res.returncode}"
+      )
+
+    if (res.stdout or "").strip() == "null":
+      return []
+
+    json_findings = json.JSONDecoder().decode(res.stdout)
+
+    return [Finding.from_dict(json_finding) for json_finding in json_findings]
 
   def import_findings(
       self,
       findings: Sequence[Finding],
   ) -> Tuple[List[str], List[Finding]]:
-    """Imports findings from a file into CodeMender."""
-    return finder.import_findings(
-        self.cm_binary,
-        findings,
-        self.repo_dir,
-        env=self.env,
-    )
+    """Imports findings and returns the IDs cm assigned them."""
+    before_findings = self.list_findings()
+    before_ids = set(_ids(before_findings))
+
+    before_fingerprints = set([f.fingerprint for f in before_findings])
+    findings_not_already_in_cm = [f for f in findings if f.fingerprint not in before_fingerprints]
+    if len(findings_not_already_in_cm) == 0:
+      return [], []
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp_file:
+      import_file = tmp_file.name
+
+    try:
+      write_import_payload(findings_not_already_in_cm, import_file)
+      import_cmd = build_cm_command(
+          self.cm_binary,
+          "report",
+          extra_flags=["import", "-f", import_file, "-p", self.repo_dir],
+      )
+      import_res = run_command(import_cmd, cwd=self.repo_dir, env=self.env, check=False)
+    finally:
+      if os.path.exists(import_file):
+        os.remove(import_file)
+
+    if import_res.returncode != 0:
+      raise FindingImportError(
+          f"'cm report import' exited {import_res.returncode}"
+      )
+
+    after_findings = self.list_findings()
+    assigned = [fid for fid in _ids(after_findings) if fid not in before_ids]
+    if not assigned:
+      raise FindingImportError(
+          "'cm report import' exited 0 but the finding set is unchanged, so no"
+          " imported finding ID could be resolved"
+      )
+    logger.info("Import round-trip: cm assigned %d finding ID(s).", len(assigned))
+    return assigned, after_findings
