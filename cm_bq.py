@@ -129,7 +129,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
       type=ScanMode,
       choices=list(ScanMode),
       default=ScanMode.SHALLOW,
-      help="How to run CodeMender find: shallow, deep, or diff.",
+      help="How to run CodeMender find: shallow, deep, or diff. Defaults to shallow.",
   )
   args = parser.parse_args(argv)
   if not args.project:
