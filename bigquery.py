@@ -14,12 +14,6 @@ logger = logging.getLogger("bigquery")
 _DEFAULT_TABLE = "findings"
 _TABLE_COMPONENT = re.compile(r"^[A-Za-z0-9_-]+$")
 
-_FIXED_STATUSES = frozenset({"FIXED", "REMEDIATED", "PATCHED"})
-_FAILED_FIX_STATUSES = frozenset({"FIX_FAILED", "PR_CREATION_FAILED", "PATCH_FAILED"})
-_VERIFIED_STATUSES = frozenset({"VERIFIED", "CONFIRMED"})
-_VERIFY_PASSED_STATUSES = _VERIFIED_STATUSES | _FIXED_STATUSES | _FAILED_FIX_STATUSES
-SKIPPED_STATUSES = frozenset({"SKIPPED_DUPLICATE", "PRE_EXISTING_IGNORED"})
-
 
 def _table_id(project: str, dataset: str, table: str) -> str:
   """Validates and constructs a fully-qualified BigQuery table ID."""
@@ -29,49 +23,24 @@ def _table_id(project: str, dataset: str, table: str) -> str:
   return f"{project}.{dataset}.{table}"
 
 
-def _as_str(value: Any) -> Optional[str]:
-  """Coerces a value to a non-empty string, or None."""
-  if value is None:
-    return None
-  text = value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
-  text = text.strip()
-  return text or None
-
-
 def _utc_now_iso() -> str:
   """Returns the current UTC time as an RFC 3339 string BigQuery accepts."""
   return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-def _row_verified(finding: Finding, status: str) -> Optional[bool]:
-  """Whether verification confirmed this finding."""
-  if finding.verified:
-    return True
-  if status in _VERIFY_PASSED_STATUSES:
-    return True
-  return finding.verified
-
-
 def build_finding_rows(
     findings: Iterable[Finding],
-    repository: Optional[str] = None,
-    scan_timestamp: Optional[str] = None,
+    repository: str,
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
   if not findings:
     return []
 
-  timestamp = scan_timestamp or _utc_now_iso()
-  repo = _as_str(repository)
+  timestamp = _utc_now_iso()
 
   rows: List[Dict[str, Any]] = []
-  for item in findings:
-    finding = item if isinstance(item, Finding) else Finding.from_dict(item)
-    title = _as_str(finding.title)
-    status = finding.status
-    vuln_type = finding.vuln_type
-
-    row: Dict[str, Any] = {
+  for finding in findings:
+    rows.append({
         "analysis": finding.analysis,
         "confidence_level": finding.confidence_level,
         "dismiss_reason": finding.dismiss_reason,
@@ -81,21 +50,19 @@ def build_finding_rows(
         "fingerprint": finding.fingerprint,
         "mute_reason": finding.mute_reason,
         "muted": finding.muted,
-        "repository": repo,
+        "repository": repository,
         "scan_timestamp": timestamp,
         "session_id": finding.session_id,
         "severity": finding.severity,
         "source_stage": finding.source_stage,
         "snippet": finding.snippet,
         "start_line": finding.start_line,
-        "status": status,
-        "title": title,
-        "verified": _row_verified(finding, status),
+        "status": finding.status,
+        "title": finding.title,
+        "verified": finding.verified,
         "vuln_id": finding.vuln_id,
-        "vuln_type": vuln_type,
-    }
-
-    rows.append(row)
+        "vuln_type": finding.vuln_type,
+    })
 
   return rows
 
@@ -254,14 +221,15 @@ WHERE repository = @repository
           f"T.`{column}` = S.`{column}`" for column in columns if column not in identity
       )
       values_sql = ", ".join(f"S.`{column}`" for column in columns)
-      merge_sql = f"""
+
+      self.client.query(f"""
 MERGE `{self.table_id}` AS T
 USING `{stage_table_id}` AS S
 ON T.repository = S.repository AND T.fingerprint = S.fingerprint
 WHEN MATCHED THEN UPDATE SET {updates_sql}
 WHEN NOT MATCHED THEN INSERT ({columns_sql}) VALUES ({values_sql})
-"""
-      self.client.query(merge_sql, location=self.location).result()
+""", location=self.location).result()
+
       return len(rows_to_load)
     finally:
       self.client.delete_table(stage_table_id, not_found_ok=True)

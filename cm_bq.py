@@ -53,13 +53,11 @@ def _print_findings(findings: Iterable[Finding]):
 
 
 def run_roundtrip(
-    *,
     repository: str,
     repo_dir: str,
     project: str,
     dataset: str,
     table: Optional[str] = None,
-    cm_binary: Optional[str] = None,
     location: Optional[str] = None,
     client: Any = None,
 ):
@@ -77,7 +75,7 @@ def run_roundtrip(
       client=client,
   )
   cm = CodeMender(
-      cm_binary=cm_binary,
+      cm_binary=shutil.which("cm") or "cm",
       repo_dir=repo_dir,
   )
 
@@ -97,7 +95,6 @@ def run_roundtrip(
   print(f"Imported {len(newly_imported_findings)} findings into CodeMender.")
 
   _print_heading("Running CodeMender find on repository...")
-
   cm.find()
 
   _print_heading("Uploading findings to BigQuery...")
@@ -108,9 +105,8 @@ def run_roundtrip(
       repo_dir=repo_dir,
   )
 
-  bq_findings_after_upload = bq.fetch_findings(repository)
-
   print("BigQuery findings after upload:")
+  bq_findings_after_upload = bq.fetch_findings(repository)
   _print_findings(bq_findings_after_upload)
   print()
 
@@ -121,19 +117,15 @@ def run_roundtrip(
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("--repository", required=True, help="BigQuery repository value, e.g. owner/name")
-  parser.add_argument("--repo-dir", required=True, help="Local CodeMender checkout to process")
-  parser.add_argument("--project", default=_resolve_project())
-  parser.add_argument("--dataset", required=True)
-  parser.add_argument("--table", default=None)
-  parser.add_argument("--cm-binary", default=shutil.which("cm") or "cm")
-  parser.add_argument("--location", default=None)
-  parser.add_argument("--dry-run", action="store_true", help="Show eligible import counts without changing CodeMender or BigQuery")
+  parser.add_argument("--repository", required=True, help="Repository to associate findings with in BigQuery.")
+  parser.add_argument("--repo-dir", required=True, help="Local repository directory to scan with CodeMender.")
+  parser.add_argument("--project", default=_resolve_project(), help="Google Cloud project id.")
+  parser.add_argument("--dataset", required=True, help="BigQuery dataset name to add findings to. Will be created if it does not exist.")
+  parser.add_argument("--table", default=None, help="BigQuery table name to create under the dataset. ")
+  parser.add_argument("--location", default=None, help="Location to store the dataset/table within.")
   args = parser.parse_args(argv)
   if not args.project:
     parser.error("--project or GOOGLE_CLOUD_PROJECT is required")
-  if not args.dataset:
-    parser.error("--dataset is required")
   return args
 
 
@@ -147,11 +139,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         project=args.project,
         dataset=args.dataset,
         table=args.table,
-        cm_binary=args.cm_binary,
         location=args.location,
     )
   except Exception as error:  # pylint: disable=broad-exception-caught
-    logger.error("BigQuery CodeMender round-trip failed: %s", error)
+    logger.error("cm_bq failed: %s", error)
     return 1
   return 0
 
