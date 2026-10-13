@@ -41,16 +41,25 @@ def _print_heading(title: str):
 
 
 def _print_findings(findings: Iterable[Finding]):
-  sorted_findings = sorted(findings, key=lambda f: f.title.upper())
+  sorted_findings = sorted(findings, key=lambda f: f"{f.file_path.upper()},{f.title.upper()}")
 
-  if len(sorted_findings) == 0:
+  num_findings = len(sorted_findings)
+  if num_findings == 0:
     print("  (None)")
     return
 
+  max_digits_in_finding_index = len(str(num_findings))
+  max_chars_in_file_path = max([len(f.file_path) for f in findings])
+
   for i in range(len(sorted_findings)):
     finding = sorted_findings[i]
-    print(f"  {1+i}) [{finding.fingerprint}] {finding.title}")
+    
+    finding_index_string = str(1+i)
+    padded_finding_index_string = finding_index_string.rjust(max_digits_in_finding_index)
 
+    padded_file_path = finding.file_path.ljust(max_chars_in_file_path)
+
+    print(f"  {padded_finding_index_string}) [{finding.fingerprint}] {padded_file_path} | {finding.title}")
 
 def run_roundtrip(
     repository: str,
