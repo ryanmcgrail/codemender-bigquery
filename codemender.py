@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional
 
 from finding import Finding
 
@@ -99,7 +99,7 @@ def run_command(
   return subprocess.CompletedProcess(cmd, return_code, "".join(stdout_lines), "")
 
 
-def write_import_payload(findings: Sequence[Any], dest_path: str) -> str:
+def write_import_payload(findings: Iterable[Finding], dest_path: str) -> str:
   """Writes a simple-JSON import payload, keeping only recognized fields."""
   payload = []
   for f in findings:
@@ -177,7 +177,7 @@ class CodeMender:
 
   def import_findings(
       self,
-      findings: Sequence[Finding],
+      findings: Iterable[Finding],
   ) -> List[Finding]:
     """Imports findings, ignoring the duplicates. Returns the list of newly imported findings."""
     before_findings = self.list_findings()
