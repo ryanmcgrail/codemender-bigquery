@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import os
 import re
 from typing import Any, Dict, Iterable, List, Optional
 import uuid
@@ -31,6 +32,7 @@ def _utc_now_iso() -> str:
 def build_finding_rows(
     findings: Iterable[Finding],
     repository: str,
+    repo_dir: str
 ) -> List[Dict[str, Any]]:
   """Maps findings onto BigQuery `findings` rows."""
   if not findings:
@@ -45,7 +47,7 @@ def build_finding_rows(
         "confidence_level": finding.confidence_level,
         "dismiss_reason": finding.dismiss_reason,
         "end_line": finding.end_line,
-        "file_path": finding.file_path,
+        "file_path": os.path.relpath(finding.file_path, repo_dir),
         "finding_id": finding.finding_id,
         "fingerprint": finding.fingerprint,
         "mute_reason": finding.mute_reason,
@@ -181,9 +183,10 @@ WHERE repository = @repository
       self,
       findings: Iterable[Finding],
       repository: str,
+      repo_dir: str,
   ) -> int:
     """Transforms CodeMender findings to telemetry rows and uploads them to BigQuery."""
-    finding_rows = build_finding_rows(findings, repository=repository)
+    finding_rows = build_finding_rows(findings, repository=repository, repo_dir=repo_dir)
     if not finding_rows:
       return 0
 
