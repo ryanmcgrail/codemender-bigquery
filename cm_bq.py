@@ -112,7 +112,7 @@ def run_roundtrip(
 
   print("New BigQuery findings:")
   preexisting_bq_fingerprints = set([f.fingerprint for f in preexisting_bq_findings])
-  _print_findings([f for f in bq_findings_after_upload if f not in preexisting_bq_fingerprints])
+  _print_findings([f for f in bq_findings_after_upload if f.fingerprint not in preexisting_bq_fingerprints])
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
