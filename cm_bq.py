@@ -103,7 +103,6 @@ def run_roundtrip(
   bq.upload_findings(
       findings=cm_findings_after_find,
       repository=repository,
-      repo_dir=repo_dir,
   )
 
   print("BigQuery findings after upload:")
