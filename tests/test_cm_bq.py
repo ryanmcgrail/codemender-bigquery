@@ -125,9 +125,36 @@ class BigQueryRoundtripTests(unittest.TestCase):
             client=object(),
         )
 
-    mock_cm.find.assert_called_once()
+    mock_cm.find.assert_called_once_with(scan_mode=roundtrip.ScanMode.SHALLOW)
     mock_bq.upload_findings.assert_called_once()
     self.assertEqual(mock_bq.upload_findings.call_args.kwargs["findings"], [discovered])
+
+  def test_parse_args_scan_mode(self):
+    default_args = roundtrip._parse_args([
+        "--repository", "acme/widgets",
+        "--repo-dir", "/tmp/repo",
+        "--project", "proj",
+        "--dataset", "ds",
+    ])
+    self.assertEqual(default_args.scan_mode, roundtrip.ScanMode.SHALLOW)
+
+    deep_args = roundtrip._parse_args([
+        "--repository", "acme/widgets",
+        "--repo-dir", "/tmp/repo",
+        "--project", "proj",
+        "--dataset", "ds",
+        "--scan-mode", "deep",
+    ])
+    self.assertEqual(deep_args.scan_mode, roundtrip.ScanMode.DEEP)
+
+    diff_args = roundtrip._parse_args([
+        "--repository", "acme/widgets",
+        "--repo-dir", "/tmp/repo",
+        "--project", "proj",
+        "--dataset", "ds",
+        "--scan-mode", "diff",
+    ])
+    self.assertEqual(diff_args.scan_mode, roundtrip.ScanMode.DIFF)
 
 
 if __name__ == "__main__":

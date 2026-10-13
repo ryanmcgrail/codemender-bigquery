@@ -181,7 +181,6 @@ WHERE repository = @repository
       self,
       findings: Iterable[Finding],
       repository: str,
-      repo_dir: Optional[str] = None,
   ) -> int:
     """Transforms CodeMender findings to telemetry rows and uploads them to BigQuery."""
     finding_rows = build_finding_rows(findings, repository=repository)

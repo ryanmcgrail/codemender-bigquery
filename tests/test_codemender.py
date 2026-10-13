@@ -99,6 +99,26 @@ class CodeMenderTests(unittest.TestCase):
       cmd = args[0]
       self.assertEqual(cmd[-1], "/tmp/other_target")
 
+  def test_find_scan_modes(self):
+    cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
+    proc = types.SimpleNamespace(returncode=0, stdout="Success")
+    with patch("codemender.run_command", return_value=proc) as mock_run:
+      cm.find(scan_mode=codemender.ScanMode.SHALLOW)
+      cm.find(scan_mode=codemender.ScanMode.DEEP)
+      cm.find(scan_mode=codemender.ScanMode.DIFF)
+
+    self.assertEqual(
+        mock_run.call_args_list[0].args[0], ["cm", "find", "/tmp/test_repo"]
+    )
+    self.assertEqual(
+        mock_run.call_args_list[1].args[0],
+        ["cm", "find", "/tmp/test_repo", "--deep"],
+    )
+    self.assertEqual(
+        mock_run.call_args_list[2].args[0],
+        ["cm", "find", "/tmp/test_repo", "--diff"],
+    )
+
   def test_find_handles_ci_gate_exit(self):
     cm = CodeMender(cm_binary="cm", repo_dir="/tmp/test_repo")
     proc = types.SimpleNamespace(

@@ -7,7 +7,7 @@ import sys
 from typing import Any, Iterable, Optional, Sequence
 
 from bigquery import BigQuery
-from codemender import CodeMender
+from codemender import CodeMender, ScanMode
 from finding import Finding
 
 logger = logging.getLogger("codemender-bigquery-roundtrip")
@@ -59,6 +59,7 @@ def run_roundtrip(
     dataset: str,
     table: Optional[str] = None,
     location: Optional[str] = None,
+    scan_mode: ScanMode = ScanMode.SHALLOW,
     client: Any = None,
 ):
   """Runs the BigQuery -> cm import/find -> BigQuery round trip."""
@@ -95,7 +96,7 @@ def run_roundtrip(
   print(f"Imported {len(newly_imported_findings)} findings into CodeMender.")
 
   _print_heading("Running CodeMender find on repository...")
-  cm.find()
+  cm.find(scan_mode=scan_mode)
 
   _print_heading("Uploading findings to BigQuery...")
   cm_findings_after_find = cm.list_findings()
@@ -123,6 +124,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
   parser.add_argument("--dataset", required=True, help="BigQuery dataset name to add findings to. Will be created if it does not exist.")
   parser.add_argument("--table", default=None, help="BigQuery table name to create under the dataset. ")
   parser.add_argument("--location", default=None, help="Location to store the dataset/table within.")
+  parser.add_argument(
+      "--scan-mode",
+      type=ScanMode,
+      choices=list(ScanMode),
+      default=ScanMode.SHALLOW,
+      help="How to run CodeMender find: shallow, deep, or diff.",
+  )
   args = parser.parse_args(argv)
   if not args.project:
     parser.error("--project or GOOGLE_CLOUD_PROJECT is required")
@@ -140,6 +148,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dataset=args.dataset,
         table=args.table,
         location=args.location,
+        scan_mode=args.scan_mode,
     )
   except Exception as error:  # pylint: disable=broad-exception-caught
     logger.error("cm_bq failed: %s", error)

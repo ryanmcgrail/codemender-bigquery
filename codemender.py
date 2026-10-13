@@ -1,5 +1,6 @@
 """CodeMender CLI wrapper class and helpers."""
 
+import enum
 import json
 import logging
 import os
@@ -15,6 +16,12 @@ logger = logging.getLogger("codemender")
 
 _CI_GATE_BLOCKING = re.compile(r"CI Gate Failure:\s*\d+ blocking finding")
 _CI_GATE_TRUNCATED = re.compile(r"CI Gate Failure:\s*Impact expansion truncated")
+
+
+class ScanMode(str, enum.Enum):
+  SHALLOW = "shallow"
+  DEEP = "deep"
+  DIFF = "diff"
 
 
 def is_ci_gate_exit(returncode: int, find_stdout: str) -> bool:
@@ -39,6 +46,8 @@ def build_cm_command(
 
   if action == "find":
     cmd = [cm_binary, "find", target_or_id]
+    if extra_flags:
+      cmd.extend(extra_flags)
   elif action == "init":
     cmd = [cm_binary, "init"]
     if extra_flags:
@@ -117,13 +126,20 @@ class CodeMender:
   def find(
       self,
       target_or_id: Optional[str] = None,
+      scan_mode: ScanMode = ScanMode.SHALLOW,
   ) -> Any:
     """Runs the CodeMender find command on the target repository directory."""
     target = target_or_id if target_or_id is not None else self.repo_dir
+    extra_flags: List[str] = []
+    if scan_mode == ScanMode.DEEP:
+      extra_flags.append("--deep")
+    elif scan_mode == ScanMode.DIFF:
+      extra_flags.append("--diff")
     command = build_cm_command(
         self.cm_binary,
         "find",
         target_or_id=target,
+        extra_flags=extra_flags,
     )
     result = run_command(command, cwd=self.repo_dir, env=self.env, check=False, print_to_stdout=True)
     returncode = getattr(result, "returncode", 0)
